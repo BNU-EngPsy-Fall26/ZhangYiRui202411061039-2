@@ -51,10 +51,25 @@ node build.mjs        # 重新生成 index.html
 | 组件 | `js/gaze/gaze_hub.js`（启动、15 Hz 采样、One-Euro 滤波、丢帧统计）、`js/gaze/calibration.js`（9 点校准 + 5 点验证）、`js/gaze/one_euro.js` |
 | 模型 | `vendor/webgazer/webgazer.js` + `vendor/webgazer/mediapipe/face_mesh/*`（simd / 非 simd 两套 wasm，共约 18 MB） |
 | 资源定位 | 用 `new URL('vendor/…', document.baseURI)` 解析，因此在 Pages 的 `/AttentionExperiment/` 子路径下也能正确加载 |
+| 资产预检 | 启动前对下面 5 个必需文件逐个 HEAD 探测；本地缺文件会自动回退到 jsDelivr 上的同名同版本 CDN，并把缺失清单写进报错 |
 | 校准 | 9 个点、每点点 5 次（共 45 次点击训练 ridge 回归），随后 5 点验证；平均误差 > 200 px 会提示重校准 |
 | 记录 | 每试次 15 Hz 采样 → 上传 `gaze_n / gaze_x / gaze_y / gaze_lost / gaze_qc`；会话级 `calib_err_px / low_quality` |
 | 剔除标准 | `gaze_qc = 0` 表示该试次人脸丢失 > 35% 或有效采样 < 10 Hz，分析时建议剔除 |
 | 兜底 | 拒绝摄像头 / 模型加载失败 / 放弃校准 → 直接做无眼动版本，流程不中断 |
+
+**`mediapipe/face_mesh/` 目录必须同时存在这 5 个文件**，少一个都会让 FaceMesh 初始化失败：
+
+```
+face_mesh.binarypb                             939 B      ← 计算图，最容易漏
+face_mesh_solution_packed_assets_loader.js     9126 B
+face_mesh_solution_packed_assets.data          3986256 B
+face_mesh_solution_simd_wasm_bin.js            330187 B
+face_mesh_solution_simd_wasm_bin.wasm          6161697 B
+```
+
+漏掉 `face_mesh.binarypb` 时，浏览器只会抛一句 `abort(undefined) ... at SolutionWasm$loadGraph`，
+报错全在 wasm 内部函数里，看不出任何原因——**遇到这个报错先回来核对这 5 个文件**。
+（这 5 个文件同属 `@mediapipe/face_mesh@0.4.1633559619`，可从 `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/` 取。）
 
 **精度提醒**：网页摄像头眼动典型误差 3–5°，1600 px 舞台下约 120–200 px，**不能**用来判定"是否看到了 20–90 px 的变化"。
 只建议做粗粒度分析：首次注视落在变化的半屏方向、觉察前 1 s 注视是否进入 bbox ±200 px、丢脸率与觉察率的关系。
