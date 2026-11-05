@@ -56,6 +56,11 @@ $('btn-cam').onclick = async () => {
     startAll();
   } catch (e) {
     GazeHub.mode = null;
+    GazeHub.wg = null;
+    // 清理 WebGazer 可能已经挂上的视频层，避免挡住后续实验画面
+    try { if (window.webgazer) { window.webgazer.end(); window.webgazer.showVideo(false); } } catch (e2) { /* ignore */ }
+    const vc = document.getElementById('webgazerVideoContainer');
+    if (vc) vc.remove();
     st.textContent = '无法启用摄像头眼动：' + (e.message || e) + '。可以点「不用摄像头，直接开始」继续。';
     toast('摄像头眼动不可用：' + (e.message || e), 'err', 7000);
   } finally {
