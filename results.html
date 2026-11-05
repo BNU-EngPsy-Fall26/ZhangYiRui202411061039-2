@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>结果汇总 · 注意与空间认知实验</title>
+<link rel="stylesheet" href="css/lab.css">
+<style>
+  body { background: #eef1f6; color: var(--text); }
+  .topbar { background: var(--navy); color: #fff; padding: 12px 22px; display: flex; align-items: center; gap: 12px; }
+  .topbar .dot { width: 26px; height: 26px; border-radius: 50%; border: 6px solid var(--gold); }
+  .topbar b { font-family: var(--serif); font-size: 17px; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 24px 18px 60px; }
+  h1 { font-family: var(--serif); color: var(--navy); font-size: 26px; margin-bottom: 6px; }
+  h2 { font-family: var(--serif); color: var(--navy); font-size: 20px; margin: 26px 0 10px; }
+  p.lead { font-size: 14px; color: #44506a; line-height: 1.8; }
+  .card { background: #fff; border-radius: 14px; padding: 18px 20px; box-shadow: 0 3px 18px rgba(13,43,92,.07); margin: 12px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid #e6eaf1; text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; }
+  .bar { height: 10px; border-radius: 6px; background: #e8edf5; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--gold); }
+  .note { font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+  .pill { display: inline-block; background: #f2f5fa; border-radius: 20px; padding: 2px 10px; font-size: 12px; color: var(--navy); margin-right: 6px; }
+  .warn { background: #fff6f4; border-left: 4px solid #c62828; padding: 10px 14px; border-radius: 8px; font-size: 14px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="topbar"><span class="dot"></span><b>结果汇总</b><span style="font-size:13px;color:#c9d3e6">实验一 CA7JK4 · 实验二 3AQE6F（数据来自课堂服务器，匿名）</span></div>
+<div class="wrap">
+  <h1>全班结果</h1>
+  <p class="lead">本页从课程服务器的 <code>/api/hw2/data</code> 读取两个实验的全部匿名记录，实时计算各条件下的平均反应时、正确率与系统性错误，用来检验作业中提出的两条预测。</p>
+  <div id="msg" class="card">正在读取数据…</div>
+
+  <h2>实验一 · 闪烁找不同 + 方向箭头（75% 有效）</h2>
+  <div class="card" id="cb-box"><p class="note">等待数据…</p></div>
+
+  <h2>实验二 ·「你在这里」地图 + 朝向提示</h2>
+  <div class="card" id="yah-box"><p class="note">等待数据…</p></div>
+
+  <h2>怎么读这张表</h2>
+  <div class="card note">
+    <p><b>实验一</b>：比较箭头有效（指向正确）与无效（指反）两种试次。若改进有效，有效试次的觉察时间应更短、漏检更少；若两者无差异，可能说明方向信息在闪烁搜索里作用有限（或在 12 试次的小样本下检验力不足）。</p>
+    <p><b>实验二</b>：把「旋转角度」当作横轴。无提示条件下，反应时应随旋转角增大（Levine 的对齐效应）；有提示（红色视锥）条件下这条斜率应明显变平。系统性错误 = 被试按「地图上方＝前方」作答的比例，它在无提示条件应更高。</p>
+    <p>样本量小（每人 12 / 48 试次）时，差异容易被噪声淹没，请把这些数字当作课堂演示，不要当作正式结论。</p>
+  </div>
+</div>
+<script type="module" src="js/results.js"></script>
+</body>
+</html>
