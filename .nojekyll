@@ -1,0 +1,2 @@
+# .nojekyll —— 让 GitHub Pages 跳过 Jekyll 处理，直接按静态文件发布
+# （否则以 _ 开头的文件/目录会被 Jekyll 忽略，例如 test/_smoke.js）
