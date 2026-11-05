@@ -53,18 +53,25 @@
     // ---- 结果视图存在但被试流程里没有入口 ----
     ok(!!document.getElementById('view-results') && !document.getElementById('view-results').classList.contains('active'), 'results view hidden');
 
-    // ---- 眼动相关界面已全部移除 ----
-    ok(!document.getElementById('screen-consent'), 'no consent screen');
-    ok(!document.getElementById('btn-cam') && !document.getElementById('chk-headpose'), 'no camera controls');
-    ok(!H.GAZE && !H.CALIB && !H.HEADPOSE, 'no gaze modules in bundle');
+    // ---- 眼动层：可选入口存在，模块已进 bundle，但不含头姿层 ----
+    ok(!!document.getElementById('screen-consent'), 'consent screen present');
+    ok(!!document.getElementById('btn-cam') && !!document.getElementById('btn-nocam'), 'camera buttons present');
+    ok(!document.getElementById('chk-headpose'), 'no headpose option');
+    ok(!!H.GAZE && !!H.CALIB, 'gaze modules in bundle');
+    ok(typeof H.GAZE.hasCameraApi === 'function' && typeof H.CALIB.runCalibration === 'function', 'gaze api exposed');
 
-    // ---- 登录后直接进入实验一（不再有知情同意/校准） ----
+    // ---- 登录 → 知情同意（不直接开跑）----
     document.getElementById('in-sid').value = 'P99';
     document.getElementById('btn-login').click();
+    await wait(200);
+    ok(document.getElementById('screen-consent').classList.contains('active'), 'login -> consent');
+    ok(!document.querySelector('.stage-root'), 'no stage before choosing mode');
+
+    // ---- 不用摄像头 → 直接进实验一 ----
+    document.getElementById('btn-nocam').click();
     await wait(600);
-    ok(!!document.querySelector('.stage-root'), 'login -> stage created');
-    ok(!!document.querySelector('.instr-card'), 'login -> experiment 1 instruction');
-    ok(!!document.getElementById('screen-login'), 'login screen still in DOM (hidden)');
+    ok(!!document.querySelector('.stage-root'), 'nocam -> stage created');
+    ok(!!document.querySelector('.instr-card'), 'nocam -> experiment 1 instruction');
     ok(!document.getElementById('screen-login').classList.contains('active'), 'login screen deactivated');
   } catch (e) {
     out.push('FAIL exception: ' + e.message + ' @ ' + String((e.stack || '').split('\n')[1] || '').trim());

@@ -7,10 +7,28 @@
 
 ## 运行
 
-**直接双击 `index.html` 即可**（单文件版，HTML + CSS + JS 全部内联，不需要服务器、不需要联网就能做完实验）。
+**直接双击 `index.html` 即可做完整实验**（单文件版，HTML + CSS + JS 全部内联）。
 
-被试流程很短：填被试编号 → 实验一 → 实验二 → 「实验结束，感谢参与」。
+**要用摄像头眼动，必须通过 https 或 localhost 打开**——浏览器只在安全上下文里放行 `getUserMedia`，且 `file://` 页面无法读取同目录的 wasm 模型。两种方式：
+
+- 在线：部署到 GitHub Pages（见下），用 `https://<用户名>.github.io/AttentionExperiment/` 打开；
+- 本地：在项目目录跑任意静态服务器，例如 `python -m http.server 8765`，再打开 `http://127.0.0.1:8765/index.html`。
+
+被试流程：填被试编号 →（可选）开启摄像头眼动并做 9 点校准 → 实验一 → 实验二 → 「实验结束，感谢参与」。
 结果汇总页不给被试入口，需要时直接访问 `index.html#/results`（或独立页 `results.html`，需联网读服务器数据）。
+
+### 部署到 GitHub Pages
+
+仓库根目录就是站点根目录，`index.html` 在根上，所以只需开启 Pages 即可：
+
+1. 打开仓库 `Settings → Pages`；
+2. **Source** 选 `Deploy from a branch`，**Branch** 选 `main`，目录选 `/ (root)`，保存；
+3. 等 1 分钟左右（Actions 里会跑一次 `pages build and deployment`）；
+4. 访问 `https://<用户名>.github.io/AttentionExperiment/`。
+
+仓库里的 `.nojekyll` 会让 Pages 跳过 Jekyll 处理，直接按静态文件发布（否则以 `_` 开头的文件会被忽略）。
+Pages 会把 `.wasm` 以 `application/wasm` 返回，模型可以直接加载；但 GitHub Pages 单文件上限 100 MB、仓库建议 1 GB 以内，所以 `vendor/` 只放了眼动实际需要的 18 MB。
+部署完先打开 `https://<用户名>.github.io/AttentionExperiment/test/eye-check.html` 做一次环境自检（见下）。
 
 ### 改代码后重新构建
 
@@ -22,6 +40,35 @@ node build.mjs        # 重新生成 index.html
 
 `src/shell.html` 是单文件版的页面骨架（放置 `{{LAB_CSS}}` / `{{RESULTS}}` / `{{JS}}` 三个占位符），
 `build.mjs` 负责把模块转成 IIFE、内联 CSS，并从 `results.html` 抽取结果视图内容。
+注意：`index.html` 只内联**代码**，`vendor/` 里的模型资源始终是外部文件，所以**不能只拷 index.html**，要连 `vendor/` 一起。
+
+## 眼动（可选层）
+
+沿用课堂原项目的做法：自托管 WebGazer.js + MediaPipe FaceMesh，9 点校准 + 5 点验证，模型完全不经过第三方服务器。
+
+| 项目 | 内容 |
+|---|---|
+| 组件 | `js/gaze/gaze_hub.js`（启动、15 Hz 采样、One-Euro 滤波、丢帧统计）、`js/gaze/calibration.js`（9 点校准 + 5 点验证）、`js/gaze/one_euro.js` |
+| 模型 | `vendor/webgazer/webgazer.js` + `vendor/webgazer/mediapipe/face_mesh/*`（simd / 非 simd 两套 wasm，共约 18 MB） |
+| 资源定位 | 用 `new URL('vendor/…', document.baseURI)` 解析，因此在 Pages 的 `/AttentionExperiment/` 子路径下也能正确加载 |
+| 校准 | 9 个点、每点点 5 次（共 45 次点击训练 ridge 回归），随后 5 点验证；平均误差 > 200 px 会提示重校准 |
+| 记录 | 每试次 15 Hz 采样 → 上传 `gaze_n / gaze_x / gaze_y / gaze_lost / gaze_qc`；会话级 `calib_err_px / low_quality` |
+| 剔除标准 | `gaze_qc = 0` 表示该试次人脸丢失 > 35% 或有效采样 < 10 Hz，分析时建议剔除 |
+| 兜底 | 拒绝摄像头 / 模型加载失败 / 放弃校准 → 直接做无眼动版本，流程不中断 |
+
+**精度提醒**：网页摄像头眼动典型误差 3–5°，1600 px 舞台下约 120–200 px，**不能**用来判定"是否看到了 20–90 px 的变化"。
+只建议做粗粒度分析：首次注视落在变化的半屏方向、觉察前 1 s 注视是否进入 bbox ±200 px、丢脸率与觉察率的关系。
+
+> 未包含原项目的 MediaPipe 头部姿态层（`tasks-vision` + `face_landmarker.task`，额外约 24 MB）。需要的话把 `vendor/mediapipe/` 整个拷进来，并恢复 `js/gaze/headpose*.js` 即可。
+
+### 眼动环境自检
+
+部署后或换机器时，先打开 `test/eye-check.html`（在线为 `/AttentionExperiment/test/eye-check.html`），依次点四个按钮：
+
+1. **检查运行环境** —— 必须是「安全上下文 = 是」；
+2. **检查模型文件** —— 7 个文件都要 200 且体积对得上；
+3. **打开摄像头** —— 出现画面即权限正常；
+4. **加载 WebGazer** —— 打印出 webgazer 对象即脚本可用。
 
 ## 实验一设计
 
@@ -33,7 +80,7 @@ node build.mjs        # 重新生成 index.html
 | 试次 | 6 场景 × 2 轮 = 12；每轮 A/B 呈现顺序随机 |
 | **改进** | 每个试次开始前，屏幕中央出现一个指向变化方位的金色箭头（900 ms），**75% 指向正确、25% 指向相反方向**；12 试次中固定 9 次有效、3 次指反 |
 | 反应 | 觉察后按空格报时，再用鼠标点击变化位置（±64 px 判对） |
-| 数据 | 每次试次记录箭头是否有效、等待时间、是否超时、是否点击、点击坐标与是否命中 |
+| 数据 | 每次试次记录箭头是否有效、等待时间、是否超时、是否点击、点击坐标与是否命中；启用眼动时另有 `gaze_n / gaze_x / gaze_y / gaze_lost / gaze_qc` |
 | 项目码 | `CA7JK4`（experiment = `changeblind_cue_arrow`） |
 
 > 原项目困难档共 8 个场景，其中 `drive3` / `drive4` 需要驾驶模拟器原图（本项目未附带图片素材），
@@ -71,16 +118,20 @@ hw2-lab/
 ├── build.mjs             打包脚本：模块 → IIFE、内联 CSS、抽取结果视图
 ├── src/shell.html        单文件版的页面骨架（三个占位符）
 ├── results.html          独立结果页（也可用 index.html#/results）
+├── .nojekyll             GitHub Pages 跳过 Jekyll
 ├── css/lab.css           沿用课堂实验的视觉样式
-├── js/app.js             主流程、视图切换、上传、弹窗
+├── js/app.js             主流程、知情同意、校准、上传、弹窗
 ├── js/stage.js           1600×900 逻辑坐标的全屏实验舞台
-├── js/exp/cb_cued.js     实验一（改进版，困难档素材）
+├── js/gaze/              眼动：gaze_hub（WebGazer 封装）、calibration（9 点校准）、one_euro（滤波）
+├── js/exp/cb_cued.js     实验一（改进版，困难档素材，记录注视汇总）
 ├── js/exp/yah_cued.js    实验二（改进版）
 ├── js/exp/scenes.js      场景绘制（课堂程序的绘图函数）
 ├── js/exp/w6_common.js   焦点守卫、HUD、按键等待等共用工具
 ├── js/results.js         结果页汇总逻辑
-├── js/lib/upload.js      上传 / 读取 / CSV 备份
-└── test/smoke.mjs        单文件版浏览器自检（无头 Chrome/Edge）
+├── js/lib/upload.js      上传 / 读取 / CSV 备份 / gazeSummary
+├── vendor/webgazer/      WebGazer.js + MediaPipe FaceMesh（自托管，约 18 MB）
+├── docs/                 眼动集成的可行性分析
+└── test/                 自检脚本与眼动环境自检页
 ```
 
 ## 自检
@@ -88,8 +139,10 @@ hw2-lab/
 ```bash
 node build.mjs          # 先构建
 node test/check.mjs     # 设计校验：试次平衡 / 线索配额 / 系统性错误判定
-node test/smoke.mjs     # 用无头 Chrome/Edge 打开 index.html，跑 25 项结构与模块断言 + 5 项流程断言
-# 浏览器打开（需先起任意静态服务）：
+node test/static.mjs    # 构建产物静态检查：脚本可解析、关键符号在、模型文件齐全
+node test/smoke.mjs     # 需要能跑无头 Chrome/Edge：25 项结构与模块断言 + 5 项流程断言
+# 浏览器打开（需 https 或 localhost）：
+#   /test/eye-check.html           眼动环境自检（安全上下文 / 模型 / 摄像头 / WebGazer）
 #   /test/harness.html?mode=draw   渲染关键画面（CB 场景、YAH 有无提示对照）
 #   /test/harness.html?mode=flow   自动作答跑完实验一，检查 12 条记录字段
 #   /test/harness.html?mode=yah    自动作答跑完实验二，检查 48 条记录与 6 格平衡
@@ -102,7 +155,9 @@ node test/smoke.mjs     # 用无头 Chrome/Edge 打开 index.html，跑 25 项�
 - 实验一使用原项目「困难」档素材：原档 8 个场景中 `drive3` / `drive4` 需要驾驶模拟器原图（本项目未附带图片素材），故用其余 6 个程序化场景，以「6 场景 × 2 轮」凑到 12 试次；第二轮存在场景记忆，分析时可按 `i<=6 / i>6` 分半检验。
 - 困难档变化都很小、30 s 上限下漏检率会偏高，这是难度本身导致的，分析时用「觉察率」而不是只看 RT。
 - 每名被试只有 3 个「箭头指反」试次，单被试层面检验力有限，结论应以全班合并为准。
-- 本项目不含眼动采集：只用按键、点击与反应时，`file://` 双击即可运行，无需摄像头与本地服务器。
+- 眼动是**可选层**：`file://` 下无法启用（安全上下文 + 本地 wasm 双限制），要用就走 https / localhost；不启用则只记录按键、点击与反应时。
+- 眼动精度约 3–5°（120–200 px），只用于粗粒度分析与质量控制，**不能**作为判定"是否看到变化"的依据。
+- 实验二不记录眼动（48 试次 × 9 s 的注视数据对本作业的方位判断问题贡献有限，且会显著拉长单次时长）。
 
 ## 数据上传
 

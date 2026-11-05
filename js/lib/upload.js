@@ -71,3 +71,22 @@ export function downloadCSV(filename, rows) {
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
+
+// 眼动记录 → 每试次汇总（接口只收平铺标量，不上传原始采样序列）
+// gaze_qc：1 = 该试次数据可用（人脸丢失 ≤35% 且有效采样 ≥10 Hz），0 = 建议剔除
+export function gazeSummary(rec) {
+  if (!rec || !rec.samples || !rec.samples.length) {
+    return { gaze_n: 0, gaze_x: null, gaze_y: null, gaze_lost: null, gaze_qc: 0 };
+  }
+  const ok = rec.samples.filter((s) => s[1] >= 0 && s[2] >= 0);
+  const n = rec.samples.length;
+  const lost = 1 - ok.length / n;
+  const hz = rec.hz || 0;
+  return {
+    gaze_n: ok.length,
+    gaze_x: ok.length ? +(ok.reduce((a, s) => a + s[1], 0) / ok.length).toFixed(3) : null,
+    gaze_y: ok.length ? +(ok.reduce((a, s) => a + s[2], 0) / ok.length).toFixed(3) : null,
+    gaze_lost: +lost.toFixed(2),
+    gaze_qc: lost <= 0.35 && hz >= 10 ? 1 : 0,
+  };
+}

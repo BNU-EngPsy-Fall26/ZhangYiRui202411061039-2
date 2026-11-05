@@ -104,6 +104,14 @@ h2.sec{font-family:var(--serif);font-size:22px;color:var(--navy);margin:8px 0 6p
 .instr-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
 .inp-big{font-size:26px;padding:8px 14px;width:160px;border:2px solid var(--navy);border-radius:10px;font-family:inherit}
 
+/* 眼动校准（9 点点击 + 5 点验证） */
+.calib-overlay{position:fixed;inset:0;background:#f2f3f5;z-index:200}
+.calib-msg{position:absolute;left:50%;top:70%;transform:translate(-50%,-50%);text-align:center;font-size:16px;color:var(--text);background:rgba(255,255,255,.85);padding:12px 22px;border-radius:12px;pointer-events:none}
+.calib-dot{position:absolute;z-index:100000;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;background:var(--gold);border:4px solid var(--navy);color:#fff;font-weight:800;font-size:12px;cursor:pointer;font-family:var(--mono)}
+.calib-dot.val{background:var(--navy);border-color:var(--gold);animation:pulse 1s infinite;cursor:default}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(.7)}}
+#webgazerVideoContainer{z-index:250 !important}
+
 .modal-bg{position:fixed;inset:0;background:rgba(10,20,40,.55);z-index:300;display:flex;align-items:center;justify-content:center}
 .modal{background:#fff;border-radius:16px;padding:26px 30px;width:min(560px,92%);border-top:5px solid var(--gold)}
 .modal h3{font-family:var(--serif);color:var(--navy);margin-bottom:8px}
@@ -388,7 +396,26 @@ body { background: #eef1f6; color: var(--text); }
         </div>
       </section>
 
-      <!-- 2. 结束 -->
+      <!-- 2. 可选：摄像头眼动 -->
+      <section class="screen" id="screen-consent">
+        <div class="consent">
+          <h2>可选：开启摄像头眼动</h2>
+          <p>本实验可以额外用笔记本摄像头估计你的注视位置（WebGazer.js + MediaPipe，模型从本站加载），用来辅助分析"眼睛先看哪里"。</p>
+          <ul>
+            <li><b>视频永不上传。</b>摄像头画面只在你自己的浏览器里处理，不连接任何第三方服务器。</li>
+            <li>上传到课程服务器的只有：每试次的<b>平均注视坐标</b>、采样数、人脸丢失比例，以及校准误差。</li>
+            <li>网页眼动精度约 3–5°（屏幕上 120–200 px），只适合看"大致在哪个区域"，<b>不作为主要指标</b>。</li>
+            <li>建议用 Chrome / Edge，正对屏幕、光线均匀、保持头部不动。<b>不启用也完全不影响完成实验。</b></li>
+          </ul>
+          <div class="row">
+            <button class="btn btn-gold" id="btn-cam">启用摄像头眼动（先做 9 点校准）</button>
+            <button class="btn btn-o" id="btn-nocam">不用摄像头，直接开始</button>
+          </div>
+          <p class="muted" id="cam-status" style="margin-top:12px"></p>
+        </div>
+      </section>
+
+      <!-- 3. 结束 -->
       <section class="screen" id="screen-final">
         <div class="consent thanks">
           <h2>实验结束</h2>
@@ -474,6 +501,43 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<'
 return { toast, api, seededRandom, sleep, esc };
 })();
 
+/* ===== js/gaze/one_euro.js ===== */
+const ONE_EURO = (function () {
+'use strict';
+
+// One-Euro 滤波（Casiez, Roussel & Vogel, CHI 2012）：低速时强平滑抑制抖动，高速时降低延迟
+class LowPass {
+  constructor() { this.y = null; this.s = null; }
+  filter(x, a) { this.s = this.s === null ? x : a * x + (1 - a) * this.s; this.y = x; return this.s; }
+}
+const alpha = (cutoff, dt) => { const tau = 1 / (2 * Math.PI * cutoff); return 1 / (1 + tau / dt); };
+
+class OneEuro {
+  constructor({ minCutoff = 0.6, beta = 0.004, dCutoff = 1.0 } = {}) {
+    Object.assign(this, { minCutoff, beta, dCutoff });
+    this.x = new LowPass(); this.dx = new LowPass(); this.t = null;
+  }
+  reset() { this.x = new LowPass(); this.dx = new LowPass(); this.t = null; }
+  filter(v, tMs) {
+    const dt = this.t === null ? 1 / 30 : Math.max(1e-3, (tMs - this.t) / 1000);
+    this.t = tMs;
+    const prev = this.x.s;
+    const d = prev === null ? 0 : (v - prev) / dt;
+    const ed = this.dx.filter(d, alpha(this.dCutoff, dt));
+    const cutoff = this.minCutoff + this.beta * Math.abs(ed);
+    return this.x.filter(v, alpha(cutoff, dt));
+  }
+}
+
+class OneEuro2D {
+  constructor(opts) { this.fx = new OneEuro(opts); this.fy = new OneEuro(opts); }
+  reset() { this.fx.reset(); this.fy.reset(); }
+  filter(x, y, t) { return [this.fx.filter(x, t), this.fy.filter(y, t)]; }
+}
+
+return { OneEuro, OneEuro2D };
+})();
+
 /* ===== js/stage.js ===== */
 const STAGE = (function () {
 'use strict';
@@ -516,6 +580,230 @@ class Stage {
 }
 
 return { SW, Stage };
+})();
+
+/* ===== js/gaze/gaze_hub.js ===== */
+const GAZE = (function () {
+'use strict';
+const { OneEuro2D } = ONE_EURO;
+// GazeHub：摄像头眼动这一层（WebGazer.js + 自托管 MediaPipe FaceMesh）
+// 资源全部相对页面定位（vendor/ 目录），因此放在 GitHub Pages 的子路径下也能用。
+// 摄像头视频只在本地浏览器内处理，任何时候都不上传；上传的只是每试次的聚合值。
+
+
+const SAMPLE_MS = 66;          // ≈15 Hz 降采样（原项目同参数）
+const STALE_MS = 400;          // 超过该时长没有预测 → 记为人脸丢失
+
+// 页面所在目录（index.html 同目录），不依赖站点根路径
+const asset = (p) => new URL(p, document.baseURI).href;
+
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    if (window.webgazer) return res();
+    const s = document.createElement('script');
+    s.src = src; s.onload = () => res(); s.onerror = () => rej(new Error('脚本加载失败：' + src));
+    document.head.appendChild(s);
+  });
+}
+
+const GazeHub = {
+  mode: null,            // 'webgazer' | null
+  cur: null,             // 最新（滤波后）注视点 {x, y, t}（视口像素）
+  wg: null,
+  filter: new OneEuro2D({ minCutoff: 0.6, beta: 0.004 }),
+  stats: { frames: 0, nulls: 0, times: [] },
+  rec: null,
+  listeners: new Set(),
+
+  hasCameraApi() { return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia); },
+
+  // 启动 WebGazer。失败（无摄像头 / 拒绝授权 / 模型加载失败）时抛错，由调用方决定是否继续无眼动
+  async startWebGazer() {
+    if (!this.hasCameraApi()) throw new Error('浏览器不支持摄像头接口（需 HTTPS 或 localhost）');
+    await loadScript(asset('vendor/webgazer/webgazer.js'));
+    const wg = window.webgazer;
+    // 关键：WebGazer 默认相对页面路径找 FaceMesh，这里显式指向自托管目录（绝对 URL，避免 worker 内相对解析出错）
+    wg.params.faceMeshSolutionPath = asset('vendor/webgazer/mediapipe/face_mesh');
+    wg.params.showVideoPreview = true;
+    wg.saveDataAcrossSessions(false);
+    wg.applyKalmanFilter(false);          // 用我们自己的 One-Euro
+    wg.setRegression('ridge');
+    let failed = null;
+    wg.setGazeListener((data) => {
+      const now = performance.now();
+      this.stats.frames++;
+      if (!data) { this.stats.nulls++; return; }
+      this.stats.times.push(now);
+      if (this.stats.times.length > 120) this.stats.times.shift();
+      const [fx, fy] = this.filter.filter(data.x, data.y, now);
+      this.cur = { x: fx, y: fy, t: now };
+      this.listeners.forEach((f) => f(this.cur));
+    });
+    await wg.begin(() => { failed = new Error('摄像头不可用或被拒绝'); });
+    if (failed) throw failed;
+    // 等待第一帧人脸模型就绪（最多 25 秒）
+    const t0 = performance.now();
+    while (performance.now() - t0 < 25000) {
+      if (this.stats.frames > 3) break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    if (this.stats.frames <= 3) throw new Error('人脸模型初始化超时（模型文件可能没加载到）');
+    wg.showPredictionPoints(false);
+    this.wg = wg; this.mode = 'webgazer';
+    return wg;
+  },
+
+  showPreview(on) {
+    if (!this.wg) return;
+    try { this.wg.showVideo(on); this.wg.showFaceOverlay(on); this.wg.showFaceFeedbackBox(on); } catch (e) { /* ignore */ }
+    // WebGazer 默认把预览放在左上角且 z-index 很高，会挡住左上角的校准点；缩小并移到上/中两排之间
+    if (on) {
+      try { this.wg.setVideoViewerSize(240, 180); } catch (e) { /* ignore */ }
+      const c = document.getElementById('webgazerVideoContainer');
+      if (c) Object.assign(c.style, { left: '50%', top: '30%', transform: 'translate(-50%,-50%)', borderRadius: '10px', overflow: 'hidden' });
+    }
+  },
+  setTraining(on) {   // 校准阶段允许点击训练；实验阶段关闭，避免点击/移动污染模型
+    if (!this.wg) return;
+    try { on ? this.wg.addMouseEventListeners() : this.wg.removeMouseEventListeners(); } catch (e) { /* ignore */ }
+  },
+  clearCalibration() { if (this.wg) { try { this.wg.clearData(); } catch (e) { /* ignore */ } } this.filter.reset(); },
+
+  // 最近 2 秒的有效预测频率
+  hz() {
+    if (this.mode !== 'webgazer') return 0;
+    const ts = this.stats.times, now = performance.now();
+    const recent = ts.filter((t) => now - t < 2000);
+    return recent.length / 2;
+  },
+  faceLoss() { const s = this.stats; return s.frames ? s.nulls / s.frames : 1; },
+  resetStats() { this.stats = { frames: 0, nulls: 0, times: [] }; },
+
+  // 开始记录：stage 需提供 toNorm(clientX, clientY) → [x,y]（舞台 0-1）
+  startRecording(stage) {
+    this.stopRecording();
+    this.resetStats();
+    const t0 = performance.now();
+    const rec = { stage, t0, samples: [], lost: 0, ticks: 0 };
+    rec.timer = setInterval(() => {
+      const now = performance.now();
+      rec.ticks++;
+      const c = this.cur;
+      if (!c || (this.mode === 'webgazer' && now - c.t > STALE_MS)) {
+        rec.lost++;
+        rec.samples.push([Math.round(now - t0), -1, -1]);
+        return;
+      }
+      const [x, y] = stage.toNorm(c.x, c.y);
+      rec.samples.push([Math.round(now - t0), +x.toFixed(4), +y.toFixed(4)]);
+    }, SAMPLE_MS);
+    this.rec = rec;
+    return t0;
+  },
+  stopRecording() {
+    const rec = this.rec;
+    if (!rec) return null;
+    clearInterval(rec.timer);
+    this.rec = null;
+    const durS = Math.max(0.001, (performance.now() - rec.t0) / 1000);
+    return {
+      samples: rec.samples,
+      hz: this.mode === 'webgazer' ? (this.stats.frames - this.stats.nulls) / durS : 0,
+      face_loss: this.mode === 'webgazer' ? (this.stats.frames ? this.stats.nulls / this.stats.frames : 1) : 1,
+      lost_share: rec.ticks ? rec.lost / rec.ticks : 0,
+    };
+  },
+  // 记录中的相对时间（ms）
+  now() { return this.rec ? performance.now() - this.rec.t0 : 0; },
+};
+
+return { GazeHub };
+})();
+
+/* ===== js/gaze/calibration.js ===== */
+const CALIB = (function () {
+'use strict';
+const { GazeHub } = GAZE;
+const { sleep } = API;
+// 9 点校准 + 5 点验证（px 与估计视角误差）
+// 角度换算假设：视距 60 cm、CSS 像素 ≈ 0.0265 cm（96 dpi）——只是估计值，用于课堂比较
+
+
+
+const VIEW_CM = 60, CM_PER_PX = 2.54 / 96;
+const pxToDeg = (px) => Math.atan((px * CM_PER_PX) / VIEW_CM) * 180 / Math.PI;
+const ERR_LIMIT_PX = 200;
+
+function overlay(html) {
+  const o = document.createElement('div');
+  o.className = 'calib-overlay';
+  o.innerHTML = html;
+  document.body.appendChild(o);
+  return o;
+}
+
+// 9 点校准：每个点注视并点击 5 次（WebGazer 用点击时刻的眼部图像训练回归）
+async function runCalibration() {
+  GazeHub.clearCalibration();
+  GazeHub.setTraining(true);
+  GazeHub.showPreview(true);
+  const o = overlay(`<div class="calib-msg"><b>校准（9 点）</b><br>请保持头部不动，<b>眼睛盯住</b>金色圆点并点击它 5 次。<br>屏幕上方的小窗是你的摄像头画面（只在本机处理，不会上传）。</div>`);
+  const pts = [];
+  for (const y of [0.1, 0.5, 0.9]) for (const x of [0.08, 0.5, 0.92]) pts.push([x, y]);
+  pts.sort(() => Math.random() - 0.5);
+  for (const [x, y] of pts) {
+    await new Promise((res) => {
+      const d = document.createElement('button');
+      d.className = 'calib-dot'; d.style.left = (x * 100) + '%'; d.style.top = (y * 100) + '%';
+      let n = 0; d.textContent = '5';
+      d.onclick = () => { n++; d.textContent = String(5 - n); d.style.opacity = String(1 - n * 0.15); if (n >= 5) { d.remove(); res(); } };
+      o.appendChild(d);
+    });
+  }
+  o.remove();
+  GazeHub.setTraining(false);
+  return runValidation();
+}
+
+// 5 点验证：每点注视 1.8 秒，取后 1.2 秒预测的中位数与目标点的距离
+async function runValidation({ quick = false } = {}) {
+  GazeHub.showPreview(false);
+  GazeHub.setTraining(false);
+  const o = overlay(`<div class="calib-msg"><b>${quick ? '快速验证' : '验证（5 点）'}</b><br>只需<b>看着</b>出现的圆点，不要点击。</div>`);
+  const targets = [[0.5, 0.5], [0.2, 0.2], [0.8, 0.2], [0.2, 0.8], [0.8, 0.8]];
+  const per = [];
+  GazeHub.resetStats();
+  await sleep(800);
+  for (const [tx, ty] of targets) {
+    const d = document.createElement('div');
+    d.className = 'calib-dot val'; d.style.left = (tx * 100) + '%'; d.style.top = (ty * 100) + '%';
+    o.appendChild(d);
+    const W = window.innerWidth, H = window.innerHeight, px = tx * W, py = ty * H;
+    const got = [];
+    const t0 = performance.now();
+    const fn = (c) => { if (performance.now() - t0 > 600) got.push([c.x, c.y]); };
+    GazeHub.listeners.add(fn);
+    await sleep(quick ? 1400 : 1800);
+    GazeHub.listeners.delete(fn);
+    d.remove();
+    if (got.length) {
+      const med = (a) => { const s = [...a].sort((p, q) => p - q); return s[Math.floor(s.length / 2)]; };
+      const mx = med(got.map(g => g[0])), my = med(got.map(g => g[1]));
+      per.push({ tx: +tx.toFixed(2), ty: +ty.toFixed(2), err: Math.hypot(mx - px, my - py), n: got.length });
+    } else per.push({ tx, ty, err: null, n: 0 });
+  }
+  o.remove();
+  const valid = per.filter(p => p.err !== null);
+  const err = valid.length ? valid.reduce((a, p) => a + p.err, 0) / valid.length : null;
+  return {
+    ok: err !== null && err <= ERR_LIMIT_PX && valid.length >= 3,
+    err_px: err, err_deg: err !== null ? pxToDeg(err) : null,
+    hz: GazeHub.hz(), face_loss: GazeHub.faceLoss(), n_points: valid.length, per,
+    screen: [window.innerWidth, window.innerHeight],
+  };
+}
+
+return { VIEW_CM, pxToDeg, ERR_LIMIT_PX, runCalibration, runValidation };
 })();
 
 /* ===== js/lib/instruct.js ===== */
@@ -639,7 +927,26 @@ function downloadCSV(filename, rows) {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 
-return { LAB, PROJECTS, sanitizeTrials, submitData, loadAll, downloadCSV };
+// 眼动记录 → 每试次汇总（接口只收平铺标量，不上传原始采样序列）
+// gaze_qc：1 = 该试次数据可用（人脸丢失 ≤35% 且有效采样 ≥10 Hz），0 = 建议剔除
+function gazeSummary(rec) {
+  if (!rec || !rec.samples || !rec.samples.length) {
+    return { gaze_n: 0, gaze_x: null, gaze_y: null, gaze_lost: null, gaze_qc: 0 };
+  }
+  const ok = rec.samples.filter((s) => s[1] >= 0 && s[2] >= 0);
+  const n = rec.samples.length;
+  const lost = 1 - ok.length / n;
+  const hz = rec.hz || 0;
+  return {
+    gaze_n: ok.length,
+    gaze_x: ok.length ? +(ok.reduce((a, s) => a + s[1], 0) / ok.length).toFixed(3) : null,
+    gaze_y: ok.length ? +(ok.reduce((a, s) => a + s[2], 0) / ok.length).toFixed(3) : null,
+    gaze_lost: +lost.toFixed(2),
+    gaze_qc: lost <= 0.35 && hz >= 10 ? 1 : 0,
+  };
+}
+
+return { LAB, PROJECTS, sanitizeTrials, submitData, loadAll, downloadCSV, gazeSummary };
 })();
 
 /* ===== js/exp/cb_scenes2.js ===== */
@@ -1210,6 +1517,7 @@ const CBCUED = (function () {
 'use strict';
 const { instruct } = INSTRUCT;
 const { sleep } = API;
+const { gazeSummary } = UPLOAD;
 const { drawChangeScene } = SCENES;
 const { focusGuard, hud } = W6;
 // 实验一 · 变化盲（Rensink, O'Regan & Clark, 1997）+ 方向箭头线索（本作业的改进）
@@ -1218,6 +1526,7 @@ const { focusGuard, hud } = W6;
 // 参数：困难档 = 灰屏 160 ms + 对比度 70%（原项目 levels.hard），6 场景 × 2 轮 = 12 试次
 // 改进：每个试次开始前先出现一个从屏幕中心指向变化位置的箭头，75% 正确（错误时指向反方向）
 // 流程与采集字段沿用课堂 Attention Lab：闪烁 240ms / 灰屏，空格报告觉察，再点击位置
+
 
 
 
@@ -1306,7 +1615,7 @@ function buildTrials() {
   return shuffle(list);
 }
 
-async function oneTrial(stage, t, i, total) {
+async function oneTrial(stage, hub, t, i, total, rec) {
   const ctx = stage.ctx;
   ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, 1600, 900);
   // 1) 方向箭头
@@ -1323,7 +1632,7 @@ async function oneTrial(stage, t, i, total) {
 
   const cyc = 2 * (ON_MS + BLANK_MS);
   let resp = null;
-  const t0 = performance.now();
+  const t0 = rec ? hub.startRecording(stage) : performance.now();
   const onKey = (e) => { if (e.code === 'Space') { e.preventDefault(); if (resp === null) resp = Math.round(performance.now() - t0); } };
   window.addEventListener('keydown', onKey);
   await new Promise((res) => {
@@ -1346,6 +1655,7 @@ async function oneTrial(stage, t, i, total) {
     requestAnimationFrame(loop);
   });
   window.removeEventListener('keydown', onKey);
+  const g = rec ? hub.stopRecording() : null;
 
   // 3) 报告位置
   let click = null;
@@ -1375,6 +1685,7 @@ async function oneTrial(stage, t, i, total) {
   const MARGIN = 64;
   const clickOk = click && click[0] * 1600 >= bx - MARGIN && click[0] * 1600 <= bx + bw + MARGIN
     && click[1] * 900 >= by - MARGIN && click[1] * 900 <= by + bh + MARGIN;
+  const gs = gazeSummary(g);
   return {
     i: i + 1,
     scene: t.scene.id,
@@ -1388,22 +1699,28 @@ async function oneTrial(stage, t, i, total) {
     click_ok: resp !== null ? (clickOk ? 1 : 0) : null,
     click_x: click ? click[0] : null,
     click_y: click ? click[1] : null,
+    gaze_n: gs.gaze_n,
+    gaze_x: gs.gaze_x,
+    gaze_y: gs.gaze_y,
+    gaze_lost: gs.gaze_lost,
+    gaze_qc: gs.gaze_qc,
   };
 }
 
-async function run({ stage, subject }) {
+async function run({ stage, hub, subject }) {
+  const rec = !!(hub && hub.mode === 'webgazer');
   const list = buildTrials();
   await instruct(stage, `<h2>实验一 · 闪烁找变化（困难）</h2>
     <p>每张画面会和一张"几乎一样"的画面快速交替闪烁，中间夹着灰屏。两张图之间有<b>一处</b>不同。</p>
     <p>每个试次开始前，屏幕中央会先出现一个<b>金色箭头</b>：它<b>大多数时候（75%）</b>指向变化所在的方位，有时会故意指反。箭头消失后立即开始闪烁。</p>
     <p>一旦发现变化，<b>立即按空格键</b>，然后用<b>鼠标点击</b>变化的位置。每张最多 ${TIMEOUT_MS / 1000} 秒。</p>
-    <p class="muted">难度为<b>困难档</b>（沿用课堂原项目：变化都在画面边缘、很小，灰屏 ${BLANK_MS} ms、对比度 ${Math.round(CONTRAST * 100)}%）。共 ${list.length} 张（6 个场景 × 2 轮），约 6 分钟。</p>`, '开始实验一');
+    <p class="muted">难度为<b>困难档</b>（沿用课堂原项目：变化都在画面边缘、很小，灰屏 ${BLANK_MS} ms、对比度 ${Math.round(CONTRAST * 100)}%）。共 ${list.length} 张（6 个场景 × 2 轮），约 6 分钟。${rec ? '摄像头眼动已开启：会记录每张图上的注视汇总。' : '未启用摄像头：只记录按键、点击与时间。'}</p>`, '开始实验一');
 
   const guard = focusGuard(stage);
   const trials = [];
   try {
     for (let i = 0; i < list.length; i++) {
-      trials.push(await oneTrial(stage, list[i], i, list.length));
+      trials.push(await oneTrial(stage, hub, list[i], i, list.length, rec));
       if (i === 5) {
         await instruct(stage, `<h2>第一轮完成</h2><p>休息一下，第二轮还是这 6 个场景，但变化位置与箭头指向会重新随机。</p>`, '继续');
       }
@@ -1417,7 +1734,7 @@ async function run({ stage, subject }) {
   return {
     trials,
     summary: { n: trials.length, detected: okN, located: corrN, subject },
-    meta: { level: 'hard', on_ms: ON_MS, blank_ms: BLANK_MS, contrast: CONTRAST, timeout_ms: TIMEOUT_MS, cue_valid_p: CUE_VALID_P },
+    meta: { level: 'hard', on_ms: ON_MS, blank_ms: BLANK_MS, contrast: CONTRAST, timeout_ms: TIMEOUT_MS, cue_valid_p: CUE_VALID_P, eye: rec },
   };
 }
 
@@ -1749,10 +2066,14 @@ const { toast } = API;
 const { Stage } = STAGE;
 const { ask } = INSTRUCT;
 const { submitData, downloadCSV, PROJECTS } = UPLOAD;
+const { GazeHub } = GAZE;
+const { runCalibration, ERR_LIMIT_PX } = CALIB;
 const CB = CBCUED;
 const YAH = YAHCUED;
 const { main: renderResults } = RESULTS;
-// 主控：被试信息 → 实验一（找不同 + 方向箭头）→ 上传 → 实验二（YAH + 朝向提示）→ 上传 → 结束
+// 主控：被试信息 →（可选）摄像头眼动 + 9 点校准 → 实验一 → 上传 → 实验二 → 上传 → 结束
+
+
 
 
 
@@ -1762,7 +2083,7 @@ const { main: renderResults } = RESULTS;
 
 
 const $ = (id) => document.getElementById(id);
-const state = { sid: '', name: '', cb: null, yah: null };
+const state = { sid: '', name: '', cb: null, yah: null, calibErr: null, lowQuality: false };
 
 function show(id) {
   document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
@@ -1780,7 +2101,7 @@ if (/(^|[#/])results/.test(location.hash)) showView('results');
 const refreshBtn = $('btn-results-refresh');
 if (refreshBtn) refreshBtn.onclick = () => showView('results', { reload: true });
 
-/* ---------------- 登录 → 直接开始 ---------------- */
+/* ---------------- 登录 → 选择是否开启眼动 ---------------- */
 $('btn-login').onclick = () => {
   const sid = $('in-sid').value.trim();
   const name = $('in-name').value.trim();
@@ -1788,24 +2109,81 @@ $('btn-login').onclick = () => {
   $('login-err').textContent = '';
   state.sid = sid; state.name = name;
   try { localStorage.setItem('hw2_name', name); } catch (e) { /* ignore */ }
-  startAll();
+  show('screen-consent');
 };
 $('in-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-login').click(); });
+
+/* ---------------- 摄像头眼动（可选，失败不阻塞流程） ---------------- */
+$('btn-nocam').onclick = () => { GazeHub.mode = null; startAll(); };
+
+$('btn-cam').onclick = async () => {
+  const st = $('cam-status');
+  const btn = $('btn-cam');
+  btn.disabled = true;
+  st.textContent = '正在加载本地眼动模型并请求摄像头权限……（首次约 5–15 秒）';
+  try {
+    await GazeHub.startWebGazer();
+    st.textContent = '摄像头已就绪，进入校准。';
+    await calibrateFlow();
+    GazeHub.showPreview(false);
+    startAll();
+  } catch (e) {
+    GazeHub.mode = null;
+    st.textContent = '无法启用摄像头眼动：' + (e.message || e) + '。可以点「不用摄像头，直接开始」继续。';
+    toast('摄像头眼动不可用：' + (e.message || e), 'err', 7000);
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+function modal(html, buttons) {
+  return new Promise((res) => {
+    const bg = document.createElement('div'); bg.className = 'modal-bg';
+    bg.innerHTML = `<div class="modal">${html}<div class="instr-actions">${buttons.map((b, i) => `<button class="btn ${b[2] || 'btn-o'}" data-i="${i}">${b[0]}</button>`).join('')}</div></div>`;
+    document.body.appendChild(bg);
+    bg.querySelectorAll('button[data-i]').forEach((b) => {
+      b.onclick = () => { bg.remove(); res(buttons[+b.dataset.i][1]); };
+    });
+  });
+}
+
+// 9 点校准 + 5 点验证；误差超限时给「重校准 / 不用摄像头 / 标记低质量继续」三个选择
+async function calibrateFlow() {
+  for (;;) {
+    const r = await runCalibration();
+    state.calibErr = r.err_px;
+    const ok = r.ok;
+    const stat = `平均误差 <b>${r.err_px != null ? Math.round(r.err_px) + ' px（约 ' + r.err_deg.toFixed(1) + '°）' : '无有效数据'}</b>　帧率 ${r.hz.toFixed(1)} Hz　人脸丢失 ${(r.face_loss * 100).toFixed(0)}%`;
+    const msg = ok
+      ? `<h3>校准完成</h3><p>${stat}</p><p class="muted">网页眼动典型误差 150–250 px，够用来区分大的兴趣区；这次的注视数据只作辅助分析。</p>`
+      : `<h3 style="color:#c62828">校准误差${r.err_px != null ? ' ' + Math.round(r.err_px) + ' px' : '无法计算'}，超过 ${ERR_LIMIT_PX} px</h3>
+         <p>建议：正对屏幕、脸部光线均匀、避免背光、保持头部不动，然后重新校准。</p><p>${stat}</p>`;
+    const choice = await modal(msg, ok
+      ? [['重新校准', 'again'], ['开始实验', 'go', 'btn-gold']]
+      : [['不用摄像头继续', 'skip'], ['仍然继续（标记低质量）', 'go'], ['重新校准', 'again', 'btn-gold']]);
+    if (choice === 'again') continue;
+    if (choice === 'skip') { GazeHub.mode = null; return; }
+    state.lowQuality = !ok;
+    return;
+  }
+}
 
 /* ---------------- 实验主流程 ---------------- */
 async function startAll() {
   show('');
   const stage = new Stage();
   window.__stage = stage;
+  const eyeOn = GazeHub.mode === 'webgazer';
 
   // 实验一
-  const r1 = await CB.run({ stage, subject: state.sid });
+  const r1 = await CB.run({ stage, hub: GazeHub, subject: state.sid });
   state.cb = r1;
-  const uploaded1 = await upload(stage, PROJECTS.cb, 'changeblind_cue_arrow', r1, 'mouse');
+  const uploaded1 = await upload(stage, PROJECTS.cb, 'changeblind_cue_arrow', r1, eyeOn ? 'webgazer' : 'mouse');
   const go = await ask(stage,
     `<h2>实验一完成</h2>
      <p>你共看了 ${r1.trials.length} 张图，报告觉察 ${r1.summary.detected} 次，定位正确 ${r1.summary.located} 次。</p>
      <p>${uploaded1 ? `数据已上传（本项目累计 <b>${uploaded1.participants}</b> 人）。` : '数据上传失败，本地已下载 CSV 备份。'}</p>
+     ${eyeOn ? `<p class="muted">眼动已记录：每张图的平均注视坐标会上传（校准误差约 ${state.calibErr != null ? Math.round(state.calibErr) + ' px' : '未知'}）。</p>` : ''}
      <p>是否继续做<b>实验二</b>（「你在这里」地图，约 5 分钟）？</p>`,
     [{ label: '继续实验二', value: 'go', cls: 'btn-gold' }, { label: '到此结束', value: 'stop', cls: 'btn-o' }]);
   if (go === 'stop') { stage.destroy(); return finish(); }
@@ -1826,9 +2204,14 @@ async function startAll() {
 
 async function upload(stage, project, experiment, result, condition) {
   const rows = result.trials.map((t) => Object.assign({}, t));
+  const meta = Object.assign({}, result.meta, {
+    eye: GazeHub.mode === 'webgazer' ? 'webgazer' : 'none',
+    calib_err_px: state.calibErr != null ? Math.round(state.calibErr) : null,
+    low_quality: state.lowQuality ? 1 : 0,
+  });
   stage.setHud('<div class="hud-tl">正在上传数据…</div>');
   try {
-    const r = await submitData(project, experiment, state.sid || 'anonymous', rows, condition, result.meta || {});
+    const r = await submitData(project, experiment, state.sid || 'anonymous', rows, condition, meta);
     stage.setHud('');
     return r;
   } catch (e) {
@@ -1850,7 +2233,7 @@ return {  };
 
 // 调试口：便于在控制台复用模块、也供自动自检使用
 
-window.__hw2 = { API, STAGE, INSTRUCT, UPLOAD, SCENES, CBCUED, YAHCUED, W6, RESULTS };
+window.__hw2 = { API, STAGE, GAZE, CALIB, INSTRUCT, UPLOAD, SCENES, CBCUED, YAHCUED, W6, RESULTS };
 
 })();
 </script>

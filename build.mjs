@@ -14,7 +14,10 @@ const read = (f) => fs.readFileSync(p(f), 'utf8');
 // [源文件, 打包后的命名空间常量名]
 const MODS = [
   ['js/api.js', 'API'],
+  ['js/gaze/one_euro.js', 'ONE_EURO'],
   ['js/stage.js', 'STAGE'],
+  ['js/gaze/gaze_hub.js', 'GAZE'],
+  ['js/gaze/calibration.js', 'CALIB'],
   ['js/lib/instruct.js', 'INSTRUCT'],
   ['js/lib/upload.js', 'UPLOAD'],
   ['js/exp/cb_scenes2.js', 'CB2MOD'],
@@ -81,7 +84,7 @@ const code = [
   "'use strict';",
   ...MODS.map(([f]) => bundleModule(f)),
   '// 调试口：便于在控制台复用模块、也供自动自检使用',
-  'window.__hw2 = { API, STAGE, INSTRUCT, UPLOAD, SCENES, CBCUED, YAHCUED, W6, RESULTS };',
+  'window.__hw2 = { API, STAGE, GAZE, CALIB, INSTRUCT, UPLOAD, SCENES, CBCUED, YAHCUED, W6, RESULTS };',
   '})();',
 ].join('\n\n').replace(/<\/script/gi, '<\\/script');
 

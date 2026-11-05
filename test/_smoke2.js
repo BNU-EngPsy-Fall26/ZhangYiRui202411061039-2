@@ -1,4 +1,4 @@
-/* 流程自检：登录 → 实验一说明卡 → 试次开始 */
+/* 流程自检：登录 → 知情同意 → 不用摄像头 → 实验一说明卡 → 试次开始 */
 (function () {
   const out = [];
   const ok = (c, msg) => out.push((c ? 'PASS ' : 'FAIL ') + msg);
@@ -7,8 +7,10 @@
   (async function () {
     try {
       document.getElementById('in-sid').value = 'P99';
-      document.getElementById('btn-login').click(); // 直接进入 startAll → 实验一说明卡
-      await wait(300);
+      document.getElementById('btn-login').click();
+      await wait(200);
+      document.getElementById('btn-nocam').click(); // 无眼动分支 → startAll → 实验一说明卡
+      await wait(400);
 
       const card = document.querySelector('.instr-card');
       ok(!!card, 'instruct card shown');

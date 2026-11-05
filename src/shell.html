@@ -77,7 +77,26 @@ body { background: #eef1f6; color: var(--text); }
         </div>
       </section>
 
-      <!-- 2. 结束 -->
+      <!-- 2. 可选：摄像头眼动 -->
+      <section class="screen" id="screen-consent">
+        <div class="consent">
+          <h2>可选：开启摄像头眼动</h2>
+          <p>本实验可以额外用笔记本摄像头估计你的注视位置（WebGazer.js + MediaPipe，模型从本站加载），用来辅助分析"眼睛先看哪里"。</p>
+          <ul>
+            <li><b>视频永不上传。</b>摄像头画面只在你自己的浏览器里处理，不连接任何第三方服务器。</li>
+            <li>上传到课程服务器的只有：每试次的<b>平均注视坐标</b>、采样数、人脸丢失比例，以及校准误差。</li>
+            <li>网页眼动精度约 3–5°（屏幕上 120–200 px），只适合看"大致在哪个区域"，<b>不作为主要指标</b>。</li>
+            <li>建议用 Chrome / Edge，正对屏幕、光线均匀、保持头部不动。<b>不启用也完全不影响完成实验。</b></li>
+          </ul>
+          <div class="row">
+            <button class="btn btn-gold" id="btn-cam">启用摄像头眼动（先做 9 点校准）</button>
+            <button class="btn btn-o" id="btn-nocam">不用摄像头，直接开始</button>
+          </div>
+          <p class="muted" id="cam-status" style="margin-top:12px"></p>
+        </div>
+      </section>
+
+      <!-- 3. 结束 -->
       <section class="screen" id="screen-final">
         <div class="consent thanks">
           <h2>实验结束</h2>

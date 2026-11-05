@@ -6,6 +6,7 @@
 // 流程与采集字段沿用课堂 Attention Lab：闪烁 240ms / 灰屏，空格报告觉察，再点击位置
 import { instruct } from '../lib/instruct.js';
 import { sleep } from '../api.js';
+import { gazeSummary } from '../lib/upload.js';
 import { drawChangeScene } from './scenes.js';
 import { focusGuard, hud } from './w6_common.js';
 
@@ -92,7 +93,7 @@ export function buildTrials() {
   return shuffle(list);
 }
 
-async function oneTrial(stage, t, i, total) {
+async function oneTrial(stage, hub, t, i, total, rec) {
   const ctx = stage.ctx;
   ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, 1600, 900);
   // 1) 方向箭头
@@ -109,7 +110,7 @@ async function oneTrial(stage, t, i, total) {
 
   const cyc = 2 * (ON_MS + BLANK_MS);
   let resp = null;
-  const t0 = performance.now();
+  const t0 = rec ? hub.startRecording(stage) : performance.now();
   const onKey = (e) => { if (e.code === 'Space') { e.preventDefault(); if (resp === null) resp = Math.round(performance.now() - t0); } };
   window.addEventListener('keydown', onKey);
   await new Promise((res) => {
@@ -132,6 +133,7 @@ async function oneTrial(stage, t, i, total) {
     requestAnimationFrame(loop);
   });
   window.removeEventListener('keydown', onKey);
+  const g = rec ? hub.stopRecording() : null;
 
   // 3) 报告位置
   let click = null;
@@ -161,6 +163,7 @@ async function oneTrial(stage, t, i, total) {
   const MARGIN = 64;
   const clickOk = click && click[0] * 1600 >= bx - MARGIN && click[0] * 1600 <= bx + bw + MARGIN
     && click[1] * 900 >= by - MARGIN && click[1] * 900 <= by + bh + MARGIN;
+  const gs = gazeSummary(g);
   return {
     i: i + 1,
     scene: t.scene.id,
@@ -174,22 +177,28 @@ async function oneTrial(stage, t, i, total) {
     click_ok: resp !== null ? (clickOk ? 1 : 0) : null,
     click_x: click ? click[0] : null,
     click_y: click ? click[1] : null,
+    gaze_n: gs.gaze_n,
+    gaze_x: gs.gaze_x,
+    gaze_y: gs.gaze_y,
+    gaze_lost: gs.gaze_lost,
+    gaze_qc: gs.gaze_qc,
   };
 }
 
-export async function run({ stage, subject }) {
+export async function run({ stage, hub, subject }) {
+  const rec = !!(hub && hub.mode === 'webgazer');
   const list = buildTrials();
   await instruct(stage, `<h2>实验一 · 闪烁找变化（困难）</h2>
     <p>每张画面会和一张"几乎一样"的画面快速交替闪烁，中间夹着灰屏。两张图之间有<b>一处</b>不同。</p>
     <p>每个试次开始前，屏幕中央会先出现一个<b>金色箭头</b>：它<b>大多数时候（75%）</b>指向变化所在的方位，有时会故意指反。箭头消失后立即开始闪烁。</p>
     <p>一旦发现变化，<b>立即按空格键</b>，然后用<b>鼠标点击</b>变化的位置。每张最多 ${TIMEOUT_MS / 1000} 秒。</p>
-    <p class="muted">难度为<b>困难档</b>（沿用课堂原项目：变化都在画面边缘、很小，灰屏 ${BLANK_MS} ms、对比度 ${Math.round(CONTRAST * 100)}%）。共 ${list.length} 张（6 个场景 × 2 轮），约 6 分钟。</p>`, '开始实验一');
+    <p class="muted">难度为<b>困难档</b>（沿用课堂原项目：变化都在画面边缘、很小，灰屏 ${BLANK_MS} ms、对比度 ${Math.round(CONTRAST * 100)}%）。共 ${list.length} 张（6 个场景 × 2 轮），约 6 分钟。${rec ? '摄像头眼动已开启：会记录每张图上的注视汇总。' : '未启用摄像头：只记录按键、点击与时间。'}</p>`, '开始实验一');
 
   const guard = focusGuard(stage);
   const trials = [];
   try {
     for (let i = 0; i < list.length; i++) {
-      trials.push(await oneTrial(stage, list[i], i, list.length));
+      trials.push(await oneTrial(stage, hub, list[i], i, list.length, rec));
       if (i === 5) {
         await instruct(stage, `<h2>第一轮完成</h2><p>休息一下，第二轮还是这 6 个场景，但变化位置与箭头指向会重新随机。</p>`, '继续');
       }
@@ -203,6 +212,6 @@ export async function run({ stage, subject }) {
   return {
     trials,
     summary: { n: trials.length, detected: okN, located: corrN, subject },
-    meta: { level: 'hard', on_ms: ON_MS, blank_ms: BLANK_MS, contrast: CONTRAST, timeout_ms: TIMEOUT_MS, cue_valid_p: CUE_VALID_P },
+    meta: { level: 'hard', on_ms: ON_MS, blank_ms: BLANK_MS, contrast: CONTRAST, timeout_ms: TIMEOUT_MS, cue_valid_p: CUE_VALID_P, eye: rec },
   };
 }
