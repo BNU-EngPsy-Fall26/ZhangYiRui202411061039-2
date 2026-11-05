@@ -597,6 +597,44 @@ const STALE_MS = 400;          // 超过该时长没有预测 → 记为人脸�
 // 页面所在目录（index.html 同目录），不依赖站点根路径
 const asset = (p) => new URL(p, document.baseURI).href;
 
+// WebGazer 的 FaceMesh 求解器需要这 5 个文件同时在 solutionPath 目录下。
+// 其中 face_mesh.binarypb 是「计算图」，最容易漏：少了它 wasm 会在 loadGraph 里 abort(undefined)，
+// 报错信息完全看不出原因（这个坑踩过）。
+const FACE_MESH_FILES = [
+  'face_mesh.binarypb',
+  'face_mesh_solution_packed_assets_loader.js',
+  'face_mesh_solution_packed_assets.data',
+  'face_mesh_solution_simd_wasm_bin.js',
+  'face_mesh_solution_simd_wasm_bin.wasm',
+];
+// 与本仓库 vendor 的资产同版本（.data 3986256 / simd .wasm 6161697 可对上）
+const FACE_MESH_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619';
+
+// 挑出缺失的文件（只用 HEAD，失败就当「取不到」而不是「缺」）
+async function missingAssets(base) {
+  const root = base.replace(/\/+$/, '');
+  const bad = [];
+  await Promise.all(FACE_MESH_FILES.map(async (f) => {
+    try {
+      const r = await fetch(root + '/' + f, { method: 'HEAD' });
+      if (!r.ok) bad.push(f + ' → HTTP ' + r.status);
+    } catch (e) { /* 服务器不支持 HEAD 时交由实际加载报错 */ }
+  }));
+  return bad;
+}
+
+// 优先自托管；部署漏了文件就退到 CDN，别让整个眼动层直接挂掉
+async function resolveSolutionPath(local) {
+  const bad = await missingAssets(local);
+  if (!bad.length) return local;
+  console.warn('[GazeHub] 本地 FaceMesh 资产缺失（' + bad.join('，') + '），改用 CDN');
+  const cdnBad = await missingAssets(FACE_MESH_CDN);
+  if (cdnBad.length) {
+    throw new Error('FaceMesh 模型文件缺失且 CDN 也不可用：' + bad.concat(cdnBad).join('，'));
+  }
+  return FACE_MESH_CDN;
+}
+
 function loadScript(src) {
   return new Promise((res, rej) => {
     if (window.webgazer) return res();
@@ -622,8 +660,9 @@ const GazeHub = {
     if (!this.hasCameraApi()) throw new Error('浏览器不支持摄像头接口（需 HTTPS 或 localhost）');
     await loadScript(asset('vendor/webgazer/webgazer.js'));
     const wg = window.webgazer;
-    // 关键：WebGazer 默认相对页面路径找 FaceMesh，这里显式指向自托管目录（绝对 URL，避免 worker 内相对解析出错）
-    wg.params.faceMeshSolutionPath = asset('vendor/webgazer/mediapipe/face_mesh');
+    // 关键：WebGazer 默认相对页面路径找 FaceMesh（./mediapipe/face_mesh），这里显式指向自托管目录
+    // （用绝对 URL，避免 worker 内相对路径解析出错）
+    wg.params.faceMeshSolutionPath = await resolveSolutionPath(asset('vendor/webgazer/mediapipe/face_mesh'));
     wg.params.showVideoPreview = true;
     wg.saveDataAcrossSessions(false);
     wg.applyKalmanFilter(false);          // 用我们自己的 One-Euro

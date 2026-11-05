@@ -1,0 +1,11 @@
+# 预编译/二进制资产：禁止 git 做换行转换、diff 与 merge-fix
+# （GitHub Pages 上是原样下发，未被改写；但本地 core.autocrlf=true 会让 .js 在仓库里变 LF，
+#   导致「本地 9126 字节 / 线上 8928 字节」的假象，排查时容易误判为文件损坏）
+*.wasm     binary
+*.data     binary
+*.binarypb binary
+*.tflite   binary
+*.png      binary
+*.jpg      binary
+*.jpeg     binary
+*.mp3      binary

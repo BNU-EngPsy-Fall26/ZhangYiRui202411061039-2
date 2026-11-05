@@ -51,6 +51,7 @@ document.getElementById('log').textContent = '';
 
 const ASSETS = [
   '../vendor/webgazer/webgazer.js',
+  '../vendor/webgazer/mediapipe/face_mesh/face_mesh.binarypb',
   '../vendor/webgazer/mediapipe/face_mesh/face_mesh_solution_packed_assets_loader.js',
   '../vendor/webgazer/mediapipe/face_mesh/face_mesh_solution_packed_assets.data',
   '../vendor/webgazer/mediapipe/face_mesh/face_mesh_solution_simd_wasm_bin.js',
@@ -74,7 +75,7 @@ document.getElementById('b2').onclick = async () => {
     try {
       const r = await fetch(u, { method: 'GET', cache: 'no-store' });
       const b = await r.arrayBuffer();
-      const okSize = b.byteLength > 1000;
+      const okSize = b.byteLength > 500;
       log((r.ok && okSize ? '✓ ' : '✗ ') + u.split('/').pop() + '  ' + r.status + '  ' + (b.byteLength / 1048576).toFixed(2) + ' MB  ' + (r.headers.get('content-type') || ''),
         r.ok && okSize ? 'ok' : 'bad');
     } catch (e) {

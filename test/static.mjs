@@ -24,6 +24,8 @@ for (const [needle, label] of [
   ['const ONE_EURO = (function', 'ONE_EURO module'],
   ['function runCalibration', 'runCalibration'],
   ['faceMeshSolutionPath', 'faceMeshSolutionPath'],
+  ['face_mesh.binarypb', 'face_mesh.binarypb preflight'],
+  ['resolveSolutionPath', 'CDN fallback'],
   ['vendor/webgazer/webgazer.js', 'webgazer asset path'],
   ['vendor/webgazer/mediapipe/face_mesh', 'face_mesh asset path'],
   ['screen-consent', 'consent screen'],
@@ -38,18 +40,20 @@ for (const [needle, label] of [
 // 不该再出现的（已删除的头姿层）
 ok(!/headpose/i.test(html), 'no headpose references');
 
-// 资源文件实际存在
-for (const f of [
-  'vendor/webgazer/webgazer.js',
-  'vendor/webgazer/mediapipe/face_mesh/face_mesh_solution_packed_assets.data',
-  'vendor/webgazer/mediapipe/face_mesh/face_mesh_solution_packed_assets_loader.js',
-  'vendor/webgazer/mediapipe/face_mesh/face_mesh_solution_simd_wasm_bin.js',
-  'vendor/webgazer/mediapipe/face_mesh/face_mesh_solution_simd_wasm_bin.wasm',
-  'vendor/webgazer/mediapipe/face_mesh/face_mesh_solution_wasm_bin.js',
-  'vendor/webgazer/mediapipe/face_mesh/face_mesh_solution_wasm_bin.wasm',
+// 资源文件实际存在（名字 → 最小字节数）
+for (const [f, min] of [
+  ['vendor/webgazer/webgazer.js', 1000],
+  ['vendor/webgazer/mediapipe/face_mesh/face_mesh.binarypb', 500],
+  ['vendor/webgazer/mediapipe/face_mesh/face_mesh_solution_packed_assets.data', 1000],
+  ['vendor/webgazer/mediapipe/face_mesh/face_mesh_solution_packed_assets_loader.js', 1000],
+  ['vendor/webgazer/mediapipe/face_mesh/face_mesh_solution_simd_wasm_bin.js', 1000],
+  ['vendor/webgazer/mediapipe/face_mesh/face_mesh_solution_simd_wasm_bin.wasm', 1000],
+  ['vendor/webgazer/mediapipe/face_mesh/face_mesh_solution_wasm_bin.js', 1000],
+  ['vendor/webgazer/mediapipe/face_mesh/face_mesh_solution_wasm_bin.wasm', 1000],
 ]) {
   const p = dir + '/' + f;
-  ok(fs.existsSync(p) && fs.statSync(p).size > 1000, 'asset ' + f.split('/').pop() + ' ' + (fs.existsSync(p) ? (fs.statSync(p).size / 1048576).toFixed(1) + 'MB' : 'MISSING'));
+  const sz = fs.existsSync(p) ? fs.statSync(p).size : -1;
+  ok(sz >= min, 'asset ' + f.split('/').pop() + ' ' + (sz < 0 ? 'MISSING' : (sz / 1048576).toFixed(2) + 'MB'));
 }
 
 const fail = out.filter((s) => s.startsWith('FAIL')).length;
