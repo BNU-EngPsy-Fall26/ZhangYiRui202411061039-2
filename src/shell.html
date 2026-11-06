@@ -48,9 +48,33 @@ body { background: #eef1f6; color: var(--text); }
 #view-results .warn, #view-analysis .warn { background: #fff6f4; border-left: 4px solid #c62828; padding: 10px 14px; border-radius: 8px; font-size: 14px; }
 #view-analysis td.note, #view-analysis th.note { text-align: left; }
 
+/* ---- 图表报告视图 ---- */
+#view-report .rep-wrap { max-width: 880px; padding: 22px 18px 70px; }
+#view-report h1 { font-family: var(--serif); color: var(--navy); font-size: 25px; margin: 0 0 6px; line-height: 1.35; }
+#view-report .rep-head { display: flex; gap: 22px; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; background: transparent; padding: 4px 0 2px; }
+#view-report .rep-head > div:first-child { flex: 1 1 380px; min-width: 0; }
+#view-report .rep-meta { flex: 0 0 auto; display: grid; gap: 4px; background: #fff; border-radius: 12px; padding: 12px 16px; box-shadow: 0 3px 18px rgba(13,43,92,.07); }
+#view-report .rep-meta > div { display: flex; gap: 12px; justify-content: space-between; font-size: 12.5px; color: var(--muted); }
+#view-report .rep-meta b { color: var(--navy); font-weight: 600; }
+#view-report .card { background: #fff; border-radius: 14px; padding: 18px 20px 20px; box-shadow: 0 3px 18px rgba(13,43,92,.07); margin: 14px 0; }
+#view-report .rep-h { font-family: var(--serif); color: var(--navy); font-size: 16.5px; margin: 0 0 8px; line-height: 1.5; }
+#view-report .note { font-size: 12.5px; color: var(--muted); line-height: 1.75; margin: 0 0 8px; }
+#view-report .note b { color: #44506a; font-weight: 600; }
+#view-report .warn { background: #fff6f4; border-left: 4px solid #c62828; padding: 10px 14px; border-radius: 8px; font-size: 13px; line-height: 1.7; margin: 10px 0; }
+#view-report table { width: 100%; border-collapse: collapse; font-size: 13px; }
+#view-report th, #view-report td { padding: 7px 10px; border-bottom: 1px solid #e6eaf1; text-align: right; white-space: nowrap; }
+#view-report th:first-child, #view-report td:first-child { text-align: left; white-space: normal; }
+#view-report th { color: var(--muted); font-weight: 600; font-size: 12.5px; }
+#view-report .rep-concl { border-top: 3px solid var(--gold); }
+#view-report .rep-concl ul { margin: 6px 0 0; padding-left: 20px; }
+#view-report .rep-concl li { font-size: 13.5px; line-height: 1.85; color: #33405c; margin-bottom: 6px; }
+#view-report .rep-concl li b { color: var(--navy); }
+
 @media (max-width: 720px) {
   .topbar { flex-wrap: wrap; padding: 10px 14px; }
   .consent { padding: 22px 18px; }
+  #view-report .rep-meta { flex: 1 1 100%; }
+  #view-report th, #view-report td { white-space: normal; }
 }
 </style>
 </head>
@@ -104,7 +128,7 @@ body { background: #eef1f6; color: var(--text); }
           <h2>实验结束</h2>
           <p>感谢你的参与！</p>
           <div class="row" style="justify-content:center;margin-top:26px">
-            <button class="btn btn-gold" id="btn-analysis">查看数据分析</button>
+            <button class="btn btn-gold" id="btn-analysis">查看分析报告（图表）</button>
           </div>
           <p class="muted" style="margin-top:10px">会把你这次的结果和全体被试放在一起看，需要联网。</p>
         </div>
@@ -135,6 +159,20 @@ body { background: #eef1f6; color: var(--text); }
         </div>
       </div>
       <div id="analysis-body"><p class="note">正在读取全体被试数据……</p></div>
+    </div>
+  </section>
+
+  <!-- ==================== 视图四：图表报告 ==================== -->
+  <section class="view" id="view-report">
+    <div class="wrap rep-wrap">
+      <div class="res-bar">
+        <span class="muted">图表报告 · 读后端最后一条记录作为「当前被试」（需联网）</span>
+        <div class="row">
+          <button type="button" class="btn btn-o btn-sm" id="btn-report-detail">数值明细</button>
+          <button type="button" class="btn btn-o btn-sm" id="btn-report-back">返回</button>
+        </div>
+      </div>
+      <div id="report-body"><p class="note">正在读取后端数据……</p></div>
     </div>
   </section>
 </main>

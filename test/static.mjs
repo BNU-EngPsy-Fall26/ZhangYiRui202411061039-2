@@ -35,6 +35,16 @@ for (const [needle, label] of [
   ['cue_type', '3-level cue condition field'],
   ['analysis-body', 'analysis view'],
   ['btn-analysis', 'analysis entry button'],
+  ['report-body', 'chart report view'],
+  ['btn-report-back', 'report back button'],
+  ['const REPORT = (function', 'REPORT module'],
+  ['const CHART = (function', 'CHART module'],
+  ['const STATS = (function', 'STATS module'],
+  ['function barChart', 'barChart'],
+  ['function groupedBar', 'groupedBar'],
+  ['function effectBar', 'effectBar'],
+  ['function pctRow', 'pctRow'],
+  ["font-family='", 'SVG font-family 加引号'],
   ['Cohen', "Cohen's d label"],
   ['Rensink', 'original-paper reference'],
   ['no consent', 'x'],
@@ -42,6 +52,18 @@ for (const [needle, label] of [
   if (label === 'x') continue;
   ok(html.includes(needle), label + ' present');
 }
+
+// 报告页的视图与样式都在单文件里
+for (const [needle, label] of [
+  ['id="view-report"', 'report view section'],
+  ['#view-report .rep-h', 'report heading style'],
+  ['#/report'.replace('#/', 'report'), 'x'],
+]) {
+  if (label === 'x') continue;
+  ok(html.includes(needle), label + ' present');
+}
+// font-family 属性必须被引号包住，否则 FONT 里的双引号会把 <text> 截断
+ok(!/font-family="Noto Sans SC"/.test(html) || /font-family='/.test(html), 'SVG 字体属性未被双引号截断');
 
 // 不该再出现的（已删除的头姿层）
 ok(!/headpose/i.test(html), 'no headpose references');

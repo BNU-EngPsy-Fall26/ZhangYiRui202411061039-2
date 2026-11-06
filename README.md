@@ -14,8 +14,17 @@
 - 在线：部署到 GitHub Pages（见下），用 `https://<用户名>.github.io/AttentionExperiment/` 打开；
 - 本地：在项目目录跑任意静态服务器，例如 `python -m http.server 8765`，再打开 `http://127.0.0.1:8765/index.html`。
 
-被试流程：填被试编号 →（可选）开启摄像头眼动并做 9 点校准 → 实验一 → 实验二 → 「实验结束，感谢参与」。
-结果汇总页不给被试入口，需要时直接访问 `index.html#/results`（或独立页 `results.html`，需联网读服务器数据）。
+被试流程：填被试编号 →（可选）开启摄像头眼动并做 9 点校准 → 实验一 → 实验二 → 「实验结束，感谢参与」→（可选）「查看分析报告」。
+
+结束后有三个查看结果的地方，都需要联网读服务器数据，也可以不跑实验直接打开：
+
+| 页面 | 地址 | 内容 |
+| --- | --- | --- |
+| **图表报告** | `index.html#/report`（或 `report.html`） | 六张 SVG 图 + 自动结论摘要，写作业直接用这个 |
+| 数值明细 | `index.html#/analysis` | 表格为主：效应量、原文对比、改进条件检验 |
+| 全班汇总 | `index.html#/results`（或 `results.html`） | 所有记录逐条列出 |
+
+报告页默认把**后端最后一条记录**当作「当前被试」（当前 `participant` 会在页头标出），这样不跑实验也能预览。
 
 ### 部署到 GitHub Pages
 
@@ -139,6 +148,7 @@ hw2-lab/
 ├── build.mjs             打包脚本：模块 → IIFE、内联 CSS、抽取结果视图
 ├── src/shell.html        单文件版的页面骨架（三个占位符）
 ├── results.html          独立结果页（也可用 index.html#/results）
+├── report.html           图表报告页入口（跳转到 index.html#/report）
 ├── .nojekyll             GitHub Pages 跳过 Jekyll
 ├── css/lab.css           沿用课堂实验的视觉样式
 ├── js/app.js             主流程、知情同意、校准、上传、弹窗
@@ -149,7 +159,10 @@ hw2-lab/
 ├── js/exp/scenes.js      场景绘制（课堂程序的绘图函数）
 ├── js/exp/w6_common.js   焦点守卫、HUD、按键等待等共用工具
 ├── js/results.js         全班汇总页逻辑
-├── js/analysis.js        数据分析页：效应量 / 原文对比 / 改进条件检验 / 我 vs 全体
+├── js/analysis.js        数值明细页：效应量 / 原文对比 / 改进条件检验 / 我 vs 全体
+├── js/report.js          图表报告页：六张 SVG 图 + 结论摘要（index.html#/report）
+├── js/lib/stats.js       统计：均值/SD/中位数/分位数 + Welch t + 配对 t + Cohen d/dz
+├── js/lib/chart.js       零依赖 SVG 图表：柱状 / 分组柱状 / 散点条 / 效应量条 / 百分位条
 ├── js/lib/upload.js      上传 / 读取 / CSV 备份 / gazeSummary
 ├── vendor/webgazer/      WebGazer.js + MediaPipe FaceMesh（自托管，约 18 MB）
 ├── docs/                 眼动集成的可行性分析
@@ -163,6 +176,7 @@ node build.mjs          # 先构建
 node test/check.mjs     # 设计校验：试次平衡 / 线索配额 / 系统性错误判定
 node test/trials.mjs    # 实验一试次生成：36 试次 / 三条件各 12 / 位置分散且不重叠
 node test/analysis.mjs  # 分析页渲染冒烟：假 DOM + 假服务器，检查无 NaN/undefined
+node test/report.mjs    # 报告页渲染：六张图齐全 / 去重 / 清洗口径 / p 值格式
 node test/static.mjs    # 构建产物静态检查：脚本可解析、关键符号在、模型文件齐全
 node test/smoke.mjs     # 需要能跑无头 Chrome/Edge：25 项结构与模块断言 + 5 项流程断言
 # 浏览器打开（需 https 或 localhost）：
