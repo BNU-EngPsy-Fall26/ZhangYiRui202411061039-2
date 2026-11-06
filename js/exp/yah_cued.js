@@ -4,6 +4,7 @@
 import { instruct } from '../lib/instruct.js';
 import { sleep } from '../api.js';
 import { focusGuard, hud, waitKey, shuffle, nextFrame, kbd, probe } from './w6_common.js';
+import { createPause } from '../lib/pause.js';
 
 const FONT = '"PingFang SC","Microsoft YaHei",sans-serif';
 const D2R = Math.PI / 180;
@@ -144,9 +145,16 @@ export async function run({ stage, subject }) {
     <p>⚠️ 导览图不一定是"正着"挂的。有些试次地图上会出现<b style="color:#c62828">红色扇形</b>，表示你在地图上面朝的方向——但<b>不是每个试次都有</b>。</p>
     <p class="muted">先练习 ${PRACTICE} 次（有提示），再正式 ${trials.length} 次，约 5 分钟。答得又快又准。</p>`, '开始实验二');
 
+  const pause = createPause(stage, {
+    experiment: '实验二',
+    note: '退出后本次数据不会上传；休息一下再点「开始实验二」即可重来。',
+  });
   const guard = focusGuard(stage), ctx = stage.ctx;
   const rows = [];
-  const one = async (t, practice) => {
+  const bail = () => ({ aborted: true, trials: rows, summary: { n: 0, correct: 0, acc: 0, subject } });
+
+  // 被暂停打断时返回 null（该题作废，继续后重做）
+  const one = async (t, practice, sig) => {
     ctx.fillStyle = '#1b1f27'; ctx.fillRect(0, 0, 1600, 900);
     ctx.fillStyle = '#cfd6e2'; ctx.font = `600 40px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('+', 800, 450);
@@ -154,8 +162,9 @@ export async function run({ stage, subject }) {
     drawYah(ctx, t.names, t.rot, t.dir, { cue: !!t.cue }); await safeFrame();
     const t0 = performance.now();
     probe({ exp: 'yah', expect: t.dir, rot: t.rot, cue: t.cue });
-    const r = await waitKey(KEYS, TIMEOUT_MS, t0);
+    const r = await waitKey(KEYS, TIMEOUT_MS, t0, sig);
     probe(null);
+    if (r.aborted) { stage.setHud(''); return null; }
     const ok = r.key === t.dir;
     stage.setHud(`<div class="center-msg" style="color:${r.key == null ? '#ffd54a' : ok ? '#7CFC9A' : '#ff8a80'}">${r.key == null ? '太慢了' : ok ? '✓' : `✗ 在你的${DIR_CN[t.dir]}`}</div>`);
     await sleep(practice ? 1100 : 420);
@@ -172,18 +181,31 @@ export async function run({ stage, subject }) {
     };
   };
 
+  // 每一题开头检查一次：暂停中就先挂住，退出则整段作废
+  const gate = async () => {
+    if (pause.quit) return 'quit';
+    if (pause.paused && await pause.waitResume() === 'quit') return 'quit';
+    return 'go';
+  };
+
   try {
     for (let k = 0; k < PRACTICE; k++) {
+      if (await gate() === 'quit') return bail();
       const p = makeTrial(1, k === 0 ? 0 : 180, k === 0 ? 'L' : 'R', LANDMARKS);
       hud(stage, `练习 ${k + 1}/${PRACTICE}`, '↑ 前 ↓ 后 ← 左 → 右');
-      await one(p, true);
+      const row = await one(p, true, pause.interrupt);
+      if (row === null) { if (await pause.waitResume() === 'quit') return bail(); k--; continue; }
     }
+    if (await gate() === 'quit') return bail();
     await instruct(stage, '<h2>练习结束</h2><p>正式开始，共 48 次。<b>有的地图有红色朝向扇形，有的没有</b>——没有的时候请自己判断方向。', '开始');
     for (let k = 0; k < trials.length; k++) {
+      if (await gate() === 'quit') return bail();
       hud(stage, `${k + 1}/${trials.length}`, '↑ 前 ↓ 后 ← 左 → 右');
-      rows.push(await one(trials[k], false));
+      const row = await one(trials[k], false, pause.interrupt);
+      if (row === null) { if (await pause.waitResume() === 'quit') return bail(); k--; continue; }
+      rows.push(row);
     }
-  } finally { guard.done(); stage.setHud(''); }
+  } finally { guard.done(); pause.destroy(); stage.setHud(''); }
 
   const okN = rows.filter((r) => r.correct).length;
   return {

@@ -24,9 +24,26 @@ body { background: #eef1f6; color: var(--text); }
 .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .err { color: #c62828; font-size: 13px; min-height: 18px; }
 .hint { background: #fffbeb; border-left: 4px solid var(--gold); border-radius: 0 8px 8px 0; padding: 10px 14px; font-size: 13px; line-height: 1.7; color: #6b5a2a; margin: 12px 0 0; }
-#screen-final .thanks { text-align: center; padding: 46px 24px; }
-#screen-final .thanks h2 { margin-bottom: 10px; }
-#screen-final .thanks p { font-size: 16px; color: #44506a; }
+/* ---- 实验选择（hub） ---- */
+.hub { max-width: 760px; margin: 8px auto; }
+.hub-head h2 { font-family: var(--serif); color: var(--navy); font-size: 24px; margin-bottom: 4px; }
+.hub-head p { font-size: 13px; margin-bottom: 16px; }
+.hub-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.hub-card { background: #fff; border-radius: 16px; padding: 20px 22px 22px; box-shadow: 0 3px 18px rgba(13,43,92,.07); border-top: 4px solid var(--gold); display: flex; flex-direction: column; }
+.hub-card.done { border-top-color: #2e7d32; background: #fcfdfb; }
+.hub-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.hub-no { font-size: 12.5px; font-weight: 700; letter-spacing: .08em; color: var(--gold); }
+.hub-card.done .hub-no { color: #2e7d32; }
+.hub-badge { font-size: 12px; padding: 2px 10px; border-radius: 20px; background: #f2f5fa; color: var(--muted); }
+.hub-badge.done { background: #e8f5e9; color: #2e7d32; font-weight: 600; }
+.hub-card h3 { font-family: var(--serif); color: var(--navy); font-size: 19px; margin: 8px 0 6px; }
+.hub-desc { font-size: 13.5px; line-height: 1.75; color: #44506a; flex: 1 1 auto; }
+.hub-meta { font-size: 12.5px; color: var(--muted); margin: 8px 0 14px; }
+.hub-btn { width: 100%; }
+.hub-card.done .hub-btn { background: #fff; color: var(--navy); border: 1.5px solid #cfd6e2; }
+.hub-foot { text-align: center; margin-top: 26px; }
+.hub-foot p { font-size: 13px; margin-bottom: 12px; }
+@media (max-width: 720px) { .hub-cards { grid-template-columns: 1fr; } }
 
 /* ---- 结果视图 ---- */
 .res-wrap { max-width: 1000px; padding: 20px 18px 60px; }
@@ -118,20 +135,48 @@ body { background: #eef1f6; color: var(--text); }
           <div class="row">
             <button class="btn btn-gold" id="btn-cam">启用摄像头眼动（先做 9 点校准）</button>
             <button class="btn btn-o" id="btn-nocam">不用摄像头，直接开始</button>
+            <button class="btn btn-o btn-sm" id="btn-consent-back">返回选择</button>
           </div>
           <p class="muted" id="cam-status" style="margin-top:12px"></p>
         </div>
       </section>
 
-      <!-- 3. 结束 -->
-      <section class="screen" id="screen-final">
-        <div class="consent thanks">
-          <h2>实验结束</h2>
-          <p>感谢你的参与！</p>
-          <div class="row" style="justify-content:center;margin-top:26px">
-            <button class="btn btn-gold" id="btn-analysis">查看分析报告（图表）</button>
+      <!-- 3. 实验选择 -->
+      <section class="screen" id="screen-hub">
+        <div class="hub">
+          <div class="hub-head">
+            <h2>选择实验</h2>
+            <p class="muted">两个实验顺序随意，做完一个会自动回到这里。<span id="hub-sid"></span></p>
           </div>
-          <p class="muted" style="margin-top:10px">会把你这次的结果和全体被试放在一起看，需要联网。</p>
+
+          <div class="hub-cards">
+            <article class="hub-card" id="hub-card-cb">
+              <div class="hub-top">
+                <span class="hub-no">实验一</span>
+                <span class="hub-badge" id="hub-badge-cb">未开始</span>
+              </div>
+              <h3>闪烁找变化</h3>
+              <p class="hub-desc">同一张广场画面与「多了一个人」的版本快速交替闪烁，发现变化立刻按空格并点击位置。</p>
+              <p class="hub-meta" id="hub-meta-cb">36 试次 · 约 5–6 分钟</p>
+              <button class="btn btn-gold hub-btn" id="btn-start-cb">开始实验一</button>
+            </article>
+
+            <article class="hub-card" id="hub-card-yah">
+              <div class="hub-top">
+                <span class="hub-no">实验二</span>
+                <span class="hub-badge" id="hub-badge-yah">未开始</span>
+              </div>
+              <h3>「你在这里」地图</h3>
+              <p class="hub-desc">看着校园导览图，判断对面那栋楼在你的哪一边；部分试次会给出你的朝向。</p>
+              <p class="hub-meta" id="hub-meta-yah">2 练习 + 48 试次 · 约 5 分钟</p>
+              <button class="btn btn-gold hub-btn" id="btn-start-yah">开始实验二</button>
+            </article>
+          </div>
+
+          <div class="hub-foot">
+            <p class="muted" id="hub-finish-note">两个实验都完成后，这里会出现「查看数据结论」。</p>
+            <button class="btn btn-gold" id="btn-hub-report" hidden>查看数据结论</button>
+          </div>
         </div>
       </section>
 

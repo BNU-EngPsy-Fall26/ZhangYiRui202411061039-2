@@ -9,6 +9,7 @@ import { sleep } from '../api.js';
 import { gazeSummary } from '../lib/upload.js';
 import { drawPlaza, plazaLayout, personBox } from './cb_scenes2.js';
 import { focusGuard, hud } from './w6_common.js';
+import { createPause } from '../lib/pause.js';
 
 const ON_MS = 240;       // 原图呈现
 const BLANK_MS = 160;    // 灰屏（困难档）
@@ -168,7 +169,9 @@ function drawCue(ctx, t) {
 }
 
 /* ---------------- 单个试次 ---------------- */
-async function oneTrial(stage, hub, t, i, total, rec) {
+// pause 传进来时：试次可被中断，中断返回 null（调用方作废这一题、继续后重做）
+async function oneTrial(stage, hub, t, i, total, rec, pause) {
+  const sig = pause ? pause.interrupt : null;   // 入口处取一次，别在 await 之后再取
   const ctx = stage.ctx;
   ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, 1600, 900);
   hud(stage, `第 ${i + 1}/${total} 张 · ${t.cue_type === CUE_NONE ? '无箭头提示' : '记住箭头指向'}`, '发现变化 → 空格');
@@ -184,15 +187,15 @@ async function oneTrial(stage, hub, t, i, total, rec) {
   const t0 = rec ? hub.startRecording(stage) : performance.now();
   const onKey = (e) => { if (e.code === 'Space') { e.preventDefault(); if (resp === null) resp = Math.round(performance.now() - t0); } };
   window.addEventListener('keydown', onKey);
-  await new Promise((res) => {
+  const why = await new Promise((res) => {
     let done = false;
-    const finish = () => { if (done) return; done = true; clearInterval(wd); res(); };
+    const finish = (w) => { if (done) return; done = true; clearInterval(wd); res(w || 'end'); };
     // 看门狗：即使 rAF 被浏览器节流（切后台/无头环境），按键也能立即结束试次
-    const wd = setInterval(() => { if (resp !== null || performance.now() - t0 >= TIMEOUT_MS) finish(); }, 50);
+    const wd = setInterval(() => { if (resp !== null || performance.now() - t0 >= TIMEOUT_MS) finish('end'); }, 50);
     const loop = () => {
       if (done) return;
       const el = performance.now() - t0;
-      if (resp !== null || el >= TIMEOUT_MS) return finish();
+      if (resp !== null || el >= TIMEOUT_MS) return finish('end');
       const ph = el % cyc;
       if (ph < ON_MS) ctx.drawImage(first, 0, 0, 1600, 900);
       else if (ph < ON_MS + BLANK_MS) { ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, 1600, 900); }
@@ -202,23 +205,30 @@ async function oneTrial(stage, hub, t, i, total, rec) {
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
+    if (sig) sig.then(() => finish('pause'));
   });
   window.removeEventListener('keydown', onKey);
   const g = rec ? hub.stopRecording() : null;
+  if (why === 'pause') return null;
 
   // 报告位置
   let click = null;
   if (resp !== null) {
     ctx.drawImage(second, 0, 0, 1600, 900);
     stage.setHud('<div class="hud-tl">请点击你看到变化的位置</div>');
-    click = await new Promise((res) => {
+    const got = await new Promise((res) => {
+      let done = false;
       const f = (e) => {
+        if (done) return; done = true;
         stage.box.removeEventListener('mousedown', f);
         const [x, y] = stage.toNorm(e.clientX, e.clientY);
         res([+x.toFixed(4), +y.toFixed(4)]);
       };
       stage.box.addEventListener('mousedown', f);
+      if (sig) sig.then(() => { if (done) return; done = true; stage.box.removeEventListener('mousedown', f); res(null); });
     });
+    if (got === null) { stage.setHud(''); return null; }
+    click = got;
   }
 
   // 反馈
@@ -266,19 +276,36 @@ export async function run({ stage, hub, subject }) {
     <p>同一张广场画面会和「多了一个行人」的版本快速交替闪烁，中间夹着灰屏。变化就是<b>多出来的那个人</b>，每张图它的位置都不一样。</p>
     <p>每个试次开始前，屏幕中央可能出现一个<b>金色箭头</b>，指向变化的大致方位。<b>有些试次没有箭头</b>，只有中央注视点；有箭头时它也不一定指对。</p>
     <p>一旦发现变化，<b>立即按空格键</b>，然后用<b>鼠标点击</b>那个多出来的人。每张最多 ${TIMEOUT_MS / 1000} 秒。</p>
-    <p class="muted">共 ${list.length} 张（无箭头 / 指向正确 / 指向相反，各 ${N_PER_CUE} 张，顺序随机），约 5–6 分钟。灰屏 ${BLANK_MS} ms、对比度 ${Math.round(CONTRAST * 100)}%。${rec ? '摄像头眼动已开启：会记录每张图上的注视汇总。' : '未启用摄像头：只记录按键、点击与时间。'}</p>`, '开始实验一');
+    <p class="muted">共 ${list.length} 张（无箭头 / 指向正确 / 指向相反，各 ${N_PER_CUE} 张，顺序随机），约 5–6 分钟。灰屏 ${BLANK_MS} ms、对比度 ${Math.round(CONTRAST * 100)}%。${rec ? '摄像头眼动已开启：会记录每张图上的注视汇总。' : '未启用摄像头：只记录按键、点击与时间。'}</p>
+    <p class="muted">中途想停：点左上角「暂停」或按 Esc。</p>`, '开始实验一');
 
+  const pause = createPause(stage, {
+    experiment: '实验一',
+    note: '退出后本次数据不会上传；休息一下再点「开始实验一」即可重来。',
+  });
   const guard = focusGuard(stage);
   const trials = [];
+  const bail = () => ({ aborted: true, trials, summary: { n: 0, detected: 0, located: 0, subject } });
   try {
     for (let i = 0; i < list.length; i++) {
-      trials.push(await oneTrial(stage, hub, list[i], i, list.length, rec));
+      if (pause.quit) return bail();
+      if (pause.paused && await pause.waitResume() === 'quit') return bail();
+
+      const row = await oneTrial(stage, hub, list[i], i, list.length, rec, pause);
+      if (row === null) {                       // 被暂停打断 → 这一题作废，继续后重做
+        if (await pause.waitResume() === 'quit') return bail();
+        i--;
+        continue;
+      }
+      trials.push(row);
+
       if (i === 11 || i === 23) {
         await instruct(stage, `<h2>第 ${i === 11 ? 1 : 2}/3 段完成</h2><p>休息一下。后面还是同一个广场，只是多出来的那个人会换位置。</p>`, '继续');
       }
     }
   } finally {
     guard.done();
+    pause.destroy();
     stage.setHud('');
   }
   const okN = trials.filter((t) => t.resp_ms !== null).length;

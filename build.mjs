@@ -22,6 +22,7 @@ const MODS = [
   ['js/lib/upload.js', 'UPLOAD'],
   ['js/lib/stats.js', 'STATS'],
   ['js/lib/chart.js', 'CHART'],
+  ['js/lib/pause.js', 'PAUSE'],
   ['js/exp/cb_scenes2.js', 'CB2MOD'],
   ['js/exp/scenes.js', 'SCENES'],
   ['js/exp/w6_common.js', 'W6'],
@@ -88,7 +89,7 @@ const code = [
   "'use strict';",
   ...MODS.map(([f]) => bundleModule(f)),
   '// 调试口：便于在控制台复用模块、也供自动自检使用',
-  'window.__hw2 = { API, STAGE, GAZE, CALIB, INSTRUCT, UPLOAD, STATS, CHART, SCENES, CB2MOD, CBCUED, YAHCUED, W6, RESULTS, ANALYSIS, REPORT };',
+  'window.__hw2 = { API, STAGE, GAZE, CALIB, INSTRUCT, UPLOAD, STATS, CHART, PAUSE, SCENES, CB2MOD, CBCUED, YAHCUED, W6, RESULTS, ANALYSIS, REPORT };',
   '})();',
 ].join('\n\n').replace(/<\/script/gi, '<\\/script');
 

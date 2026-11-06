@@ -28,7 +28,8 @@ export function focusGuard(stage) {
 }
 
 // 等待按键：codes = { KeyF: 'F', KeyJ: 'J' }；返回 { key, rt }（rt 相对 t0）；超时返回 key=null
-export function waitKey(codes, timeout, t0 = performance.now()) {
+// abort 传进来时（暂停信号），会立刻解绑监听并返回 { aborted: true }，避免残留的监听抢下一次按键
+export function waitKey(codes, timeout, t0 = performance.now(), abort = null) {
   return new Promise((res) => {
     let to = null;
     const f = (e) => {
@@ -41,6 +42,7 @@ export function waitKey(codes, timeout, t0 = performance.now()) {
     const done = (r) => { window.removeEventListener('keydown', f, true); clearTimeout(to); res(r); };
     window.addEventListener('keydown', f, true);
     if (timeout) to = setTimeout(() => done({ key: null, rt: null }), Math.max(0, timeout - (performance.now() - t0)));
+    if (abort) abort.then(() => done({ key: null, rt: null, aborted: true }));
   });
 }
 

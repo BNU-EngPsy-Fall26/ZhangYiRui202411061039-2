@@ -1,7 +1,6 @@
-// 主控：被试信息 →（可选）摄像头眼动 + 9 点校准 → 实验一 → 上传 → 实验二 → 上传 → 结束
+// 主控：被试信息 →（可选）摄像头眼动 + 9 点校准 → 实验选择 → 实验一 / 实验二 → 数据结论
 import { toast } from './api.js';
 import { Stage } from './stage.js';
-import { ask } from './lib/instruct.js';
 import { submitData, downloadCSV, PROJECTS, suggestParticipant } from './lib/upload.js';
 import { GazeHub } from './gaze/gaze_hub.js';
 import { runCalibration, ERR_LIMIT_PX } from './gaze/calibration.js';
@@ -12,7 +11,7 @@ import { main as renderAnalysis } from './analysis.js';
 import { main as renderReport } from './report.js';
 
 const $ = (id) => document.getElementById(id);
-const state = { sid: '', name: '', cb: null, yah: null, calibErr: null, lowQuality: false };
+const state = { sid: '', name: '', cb: null, yah: null, calibErr: null, lowQuality: false, eyeAsked: false };
 
 function show(id) {
   document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
@@ -42,13 +41,18 @@ else if (/(^|[#/])analysis/.test(location.hash)) showView('analysis', { reload: 
 else if (/(^|[#/])results/.test(location.hash)) showView('results');
 const refreshBtn = $('btn-results-refresh');
 if (refreshBtn) refreshBtn.onclick = () => showView('results', { reload: true });
-if ($('btn-analysis')) $('btn-analysis').onclick = () => showView('report', { reload: true });
-if ($('btn-analysis-back')) $('btn-analysis-back').onclick = () => showView('lab');
+if ($('btn-analysis-back')) $('btn-analysis-back').onclick = () => goLab();
 if ($('btn-analysis-group')) $('btn-analysis-group').onclick = () => showView('results', { reload: true });
-if ($('btn-report-back')) $('btn-report-back').onclick = () => showView('lab');
+if ($('btn-report-back')) $('btn-report-back').onclick = () => goLab();
 if ($('btn-report-detail')) $('btn-report-detail').onclick = () => openAnalysis();
 
-/* ---------------- 登录 → 选择是否开启眼动 ---------------- */
+// 从结果类页面回到「实验选择」；没登录过就回登录页
+function goLab() {
+  showView('lab');
+  if (state.sid) showHub(); else show('screen-login');
+}
+
+/* ---------------- 登录 → 实验选择 ---------------- */
 $('btn-login').onclick = () => {
   const sid = $('in-sid').value.trim();
   const name = $('in-name').value.trim();
@@ -56,7 +60,7 @@ $('btn-login').onclick = () => {
   $('login-err').textContent = '';
   state.sid = sid; state.name = name;
   try { localStorage.setItem('hw2_name', name); } catch (e) { /* ignore */ }
-  show('screen-consent');
+  showHub();
 };
 $('in-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-login').click(); });
 
@@ -71,8 +75,61 @@ $('in-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-
   if (hint) hint.textContent = `已按后端 ${s.n} 名被试预填 ${s.sid}，可手动改。`;
 })();
 
+/* ---------------- 实验选择（hub） ---------------- */
+function showHub() {
+  showView('lab');
+  updateHub();
+  show('screen-hub');
+  try { window.scrollTo(0, 0); } catch (e) { /* ignore */ }
+}
+
+function setCard(key, label, done, doneText, idleText) {
+  const card = $('hub-card-' + key), badge = $('hub-badge-' + key);
+  const meta = $('hub-meta-' + key), btn = $('btn-start-' + key);
+  if (!card) return;
+  card.classList.toggle('done', done);
+  badge.classList.toggle('done', done);
+  badge.textContent = done ? '已完成' : '未开始';
+  meta.textContent = done ? doneText : idleText;
+  btn.textContent = (done ? '重做' : '开始') + label;
+}
+
+function updateHub() {
+  const cb = state.cb, yah = state.yah;
+  const sidEl = $('hub-sid');
+  if (sidEl) sidEl.textContent = state.sid ? `当前被试 ${state.sid}。` : '';
+
+  setCard('cb', '实验一', !!cb,
+    cb ? `已完成 · 觉察 ${cb.summary.detected}/${cb.summary.n}，定位正确 ${cb.summary.located}` : '',
+    '36 试次 · 约 5–6 分钟');
+  setCard('yah', '实验二', !!yah,
+    yah ? `已完成 · 正确率 ${(yah.summary.acc * 100).toFixed(0)}%（${yah.summary.correct}/${yah.summary.n}）` : '',
+    '2 练习 + 48 试次 · 约 5 分钟');
+
+  const missing = (cb ? 0 : 1) + (yah ? 0 : 1);
+  const btn = $('btn-hub-report'), note = $('hub-finish-note');
+  if (btn) btn.hidden = missing > 0;
+  if (note) {
+    note.textContent = missing === 0
+      ? '两个实验都完成了，谢谢参与！可以去看数据结论。'
+      : `还剩 ${missing} 个实验没做，做完后这里会出现「查看数据结论」。`;
+  }
+}
+
+$('btn-start-cb').onclick = () => {
+  if (!state.eyeAsked) { show('screen-consent'); return; }   // 只有实验一用到眼动
+  runExp('cb');
+};
+$('btn-start-yah').onclick = () => runExp('yah');
+$('btn-consent-back').onclick = () => showHub();
+$('btn-hub-report').onclick = () => showView('report', { reload: true });
+
 /* ---------------- 摄像头眼动（可选，失败不阻塞流程） ---------------- */
-$('btn-nocam').onclick = () => { GazeHub.mode = null; startAll(); };
+function afterEyeDecision() {
+  state.eyeAsked = true;
+  runExp('cb');
+}
+$('btn-nocam').onclick = () => { GazeHub.mode = null; afterEyeDecision(); };
 
 $('btn-cam').onclick = async () => {
   const st = $('cam-status');
@@ -84,7 +141,7 @@ $('btn-cam').onclick = async () => {
     st.textContent = '摄像头已就绪，进入校准。';
     await calibrateFlow();
     GazeHub.showPreview(false);
-    startAll();
+    afterEyeDecision();
   } catch (e) {
     GazeHub.mode = null;
     GazeHub.wg = null;
@@ -131,39 +188,41 @@ async function calibrateFlow() {
   }
 }
 
-/* ---------------- 实验主流程 ---------------- */
-async function startAll() {
+/* ---------------- 跑一个实验 → 上传 → 回选择界面 ---------------- */
+let running = false;
+
+async function runExp(which) {
+  if (running) return;
+  running = true;
   show('');
   const stage = new Stage();
   window.__stage = stage;
   const eyeOn = GazeHub.mode === 'webgazer';
+  let note = null;
 
-  // 实验一
-  const r1 = await CB.run({ stage, hub: GazeHub, subject: state.sid });
-  state.cb = r1;
-  const uploaded1 = await upload(stage, PROJECTS.cb, 'changeblind_cue_arrow', r1, eyeOn ? 'webgazer' : 'mouse');
-  const go = await ask(stage,
-    `<h2>实验一完成</h2>
-     <p>你共看了 ${r1.trials.length} 张图，报告觉察 ${r1.summary.detected} 次，定位正确 ${r1.summary.located} 次。</p>
-     <p>${uploaded1 ? `数据已上传（本项目累计 <b>${uploaded1.participants}</b> 人）。` : '数据上传失败，本地已下载 CSV 备份。'}</p>
-     ${eyeOn ? `<p class="muted">眼动已记录：每张图的平均注视坐标会上传（校准误差约 ${state.calibErr != null ? Math.round(state.calibErr) + ' px' : '未知'}）。</p>` : ''}
-     <p>是否继续做<b>实验二</b>（「你在这里」地图，约 5 分钟）？</p>`,
-    [{ label: '继续实验二', value: 'go', cls: 'btn-gold' }, { label: '到此结束', value: 'stop', cls: 'btn-o' }]);
-  if (go === 'stop') { stage.destroy(); return finish(); }
-
-  // 实验二
-  const r2 = await YAH.run({ stage, subject: state.sid });
-  state.yah = r2;
-  const uploaded2 = await upload(stage, PROJECTS.yah, 'yah_heading_cue', r2, 'within');
-  const after = await ask(stage,
-    `<h2>实验二完成</h2>
-     <p>共 ${r2.trials.length} 次，正确 ${r2.summary.correct} 次（正确率 ${(r2.summary.acc * 100).toFixed(0)}%）。</p>
-     <p>${uploaded2 ? `数据已上传（本项目累计 <b>${uploaded2.participants}</b> 人）。` : '数据上传失败，本地已下载 CSV 备份。'}</p>
-     <p>两个实验都完成了，谢谢你的参与！要不要现在看一下分析结果？</p>`,
-    [{ label: '查看分析报告', value: 'report', cls: 'btn-gold' }, { label: '结束', value: 'ok', cls: 'btn-o' }]);
-  stage.destroy();
-  finish();
-  if (after === 'report') { showView('report', { reload: true }); }
+  try {
+    if (which === 'cb') {
+      const r = await CB.run({ stage, hub: GazeHub, subject: state.sid });
+      if (r.aborted) { note = { msg: '已退出实验一，本次数据未上传。', type: 'err' }; return; }
+      state.cb = r;
+      const up = await upload(stage, PROJECTS.cb, 'changeblind_cue_arrow', r, eyeOn ? 'webgazer' : 'mouse');
+      note = { msg: up ? `实验一完成，数据已上传（本项目累计 ${up.participants} 人）。` : '实验一完成，但上传失败，已下载 CSV 备份。', type: up ? 'ok' : 'err' };
+    } else {
+      const r = await YAH.run({ stage, subject: state.sid });
+      if (r.aborted) { note = { msg: '已退出实验二，本次数据未上传。', type: 'err' }; return; }
+      state.yah = r;
+      const up = await upload(stage, PROJECTS.yah, 'yah_heading_cue', r, 'within');
+      note = { msg: up ? `实验二完成，数据已上传（本项目累计 ${up.participants} 人）。` : '实验二完成，但上传失败，已下载 CSV 备份。', type: up ? 'ok' : 'err' };
+    }
+  } catch (e) {
+    console.error('[runExp]', e);
+    note = { msg: '实验出错：' + (e.message || e), type: 'err' };
+  } finally {
+    try { stage.destroy(); } catch (e) { /* ignore */ }
+    running = false;
+    showHub();
+    if (note) toast(note.msg, note.type, 6000);
+  }
 }
 
 async function upload(stage, project, experiment, result, condition) {
@@ -173,7 +232,7 @@ async function upload(stage, project, experiment, result, condition) {
     calib_err_px: state.calibErr != null ? Math.round(state.calibErr) : null,
     low_quality: state.lowQuality ? 1 : 0,
   });
-  stage.setHud('<div class="hud-tl">正在上传数据…</div>');
+  stage.setHud('<div class="hud-tl" style="left:116px">正在上传数据…</div>');
   try {
     const r = await submitData(project, experiment, state.sid || 'anonymous', rows, condition, meta);
     stage.setHud('');
@@ -184,10 +243,4 @@ async function upload(stage, project, experiment, result, condition) {
     downloadCSV(`hw2_${experiment}_${state.sid || 'anon'}.csv`, rows);
     return null;
   }
-}
-
-/* ---------------- 结束页：只显示「实验结束，感谢参与」 ---------------- */
-function finish() {
-  show('screen-final');
-  try { window.scrollTo(0, 0); } catch (e) { /* ignore */ }
 }

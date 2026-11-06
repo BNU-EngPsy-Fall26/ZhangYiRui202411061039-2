@@ -95,6 +95,19 @@ h2.sec{font-family:var(--serif);font-size:22px;color:var(--navy);margin:8px 0 6p
 .stage-box canvas{width:100%;height:100%;display:block}
 .hud{position:absolute;inset:0;pointer-events:none;color:#fff}
 .hud-tl{position:absolute;left:14px;top:10px;background:rgba(0,0,0,.45);padding:4px 12px;border-radius:14px;font-size:14px}
+
+/* ---- 实验内暂停 / 退出 ---- */
+.stage-pause{position:absolute;left:12px;top:9px;z-index:7;display:flex;align-items:center;gap:6px;border:0;border-radius:14px;padding:6px 13px;background:rgba(255,255,255,.16);color:#fff;font:600 13px/1.2 "PingFang SC","Microsoft YaHei",system-ui,sans-serif;cursor:pointer;transition:background .15s,transform .1s}
+.stage-pause:hover{background:rgba(255,255,255,.32)}
+.stage-pause:active{transform:scale(.96)}
+.stage-pause span{font-size:10px;letter-spacing:1px;opacity:.85}
+.stage-box.has-pause .hud-tl{left:116px}
+.pause-veil{position:absolute;inset:0;background:rgba(6,12,24,.55);z-index:8}
+.pause-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(480px,90%);background:#fff;color:var(--text);border-radius:16px;padding:24px 26px;box-shadow:0 12px 44px rgba(0,0,0,.5);border-top:5px solid var(--gold);z-index:9}
+.pause-card h2{font-family:var(--serif);color:var(--navy);font-size:21px;margin-bottom:8px}
+.pause-card p{font-size:14px;margin:7px 0;line-height:1.75}
+.pause-card .muted{font-size:12.5px;color:var(--muted)}
+.pause-card .instr-actions{margin-top:18px}
 .center-msg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:26px;background:rgba(0,0,0,.5);padding:10px 26px;border-radius:12px}
 .countdown{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:110px;font-weight:800;color:var(--gold);text-shadow:0 4px 20px rgba(0,0,0,.6)}
 .instr-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(720px,92%);max-height:92%;overflow:auto;background:#fff;color:var(--text);border-radius:16px;padding:26px 30px;box-shadow:0 10px 40px rgba(0,0,0,.4);border-top:5px solid var(--gold)}
@@ -343,9 +356,26 @@ body { background: #eef1f6; color: var(--text); }
 .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .err { color: #c62828; font-size: 13px; min-height: 18px; }
 .hint { background: #fffbeb; border-left: 4px solid var(--gold); border-radius: 0 8px 8px 0; padding: 10px 14px; font-size: 13px; line-height: 1.7; color: #6b5a2a; margin: 12px 0 0; }
-#screen-final .thanks { text-align: center; padding: 46px 24px; }
-#screen-final .thanks h2 { margin-bottom: 10px; }
-#screen-final .thanks p { font-size: 16px; color: #44506a; }
+/* ---- 实验选择（hub） ---- */
+.hub { max-width: 760px; margin: 8px auto; }
+.hub-head h2 { font-family: var(--serif); color: var(--navy); font-size: 24px; margin-bottom: 4px; }
+.hub-head p { font-size: 13px; margin-bottom: 16px; }
+.hub-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.hub-card { background: #fff; border-radius: 16px; padding: 20px 22px 22px; box-shadow: 0 3px 18px rgba(13,43,92,.07); border-top: 4px solid var(--gold); display: flex; flex-direction: column; }
+.hub-card.done { border-top-color: #2e7d32; background: #fcfdfb; }
+.hub-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.hub-no { font-size: 12.5px; font-weight: 700; letter-spacing: .08em; color: var(--gold); }
+.hub-card.done .hub-no { color: #2e7d32; }
+.hub-badge { font-size: 12px; padding: 2px 10px; border-radius: 20px; background: #f2f5fa; color: var(--muted); }
+.hub-badge.done { background: #e8f5e9; color: #2e7d32; font-weight: 600; }
+.hub-card h3 { font-family: var(--serif); color: var(--navy); font-size: 19px; margin: 8px 0 6px; }
+.hub-desc { font-size: 13.5px; line-height: 1.75; color: #44506a; flex: 1 1 auto; }
+.hub-meta { font-size: 12.5px; color: var(--muted); margin: 8px 0 14px; }
+.hub-btn { width: 100%; }
+.hub-card.done .hub-btn { background: #fff; color: var(--navy); border: 1.5px solid #cfd6e2; }
+.hub-foot { text-align: center; margin-top: 26px; }
+.hub-foot p { font-size: 13px; margin-bottom: 12px; }
+@media (max-width: 720px) { .hub-cards { grid-template-columns: 1fr; } }
 
 /* ---- 结果视图 ---- */
 .res-wrap { max-width: 1000px; padding: 20px 18px 60px; }
@@ -437,20 +467,48 @@ body { background: #eef1f6; color: var(--text); }
           <div class="row">
             <button class="btn btn-gold" id="btn-cam">启用摄像头眼动（先做 9 点校准）</button>
             <button class="btn btn-o" id="btn-nocam">不用摄像头，直接开始</button>
+            <button class="btn btn-o btn-sm" id="btn-consent-back">返回选择</button>
           </div>
           <p class="muted" id="cam-status" style="margin-top:12px"></p>
         </div>
       </section>
 
-      <!-- 3. 结束 -->
-      <section class="screen" id="screen-final">
-        <div class="consent thanks">
-          <h2>实验结束</h2>
-          <p>感谢你的参与！</p>
-          <div class="row" style="justify-content:center;margin-top:26px">
-            <button class="btn btn-gold" id="btn-analysis">查看分析报告（图表）</button>
+      <!-- 3. 实验选择 -->
+      <section class="screen" id="screen-hub">
+        <div class="hub">
+          <div class="hub-head">
+            <h2>选择实验</h2>
+            <p class="muted">两个实验顺序随意，做完一个会自动回到这里。<span id="hub-sid"></span></p>
           </div>
-          <p class="muted" style="margin-top:10px">会把你这次的结果和全体被试放在一起看，需要联网。</p>
+
+          <div class="hub-cards">
+            <article class="hub-card" id="hub-card-cb">
+              <div class="hub-top">
+                <span class="hub-no">实验一</span>
+                <span class="hub-badge" id="hub-badge-cb">未开始</span>
+              </div>
+              <h3>闪烁找变化</h3>
+              <p class="hub-desc">同一张广场画面与「多了一个人」的版本快速交替闪烁，发现变化立刻按空格并点击位置。</p>
+              <p class="hub-meta" id="hub-meta-cb">36 试次 · 约 5–6 分钟</p>
+              <button class="btn btn-gold hub-btn" id="btn-start-cb">开始实验一</button>
+            </article>
+
+            <article class="hub-card" id="hub-card-yah">
+              <div class="hub-top">
+                <span class="hub-no">实验二</span>
+                <span class="hub-badge" id="hub-badge-yah">未开始</span>
+              </div>
+              <h3>「你在这里」地图</h3>
+              <p class="hub-desc">看着校园导览图，判断对面那栋楼在你的哪一边；部分试次会给出你的朝向。</p>
+              <p class="hub-meta" id="hub-meta-yah">2 练习 + 48 试次 · 约 5 分钟</p>
+              <button class="btn btn-gold hub-btn" id="btn-start-yah">开始实验二</button>
+            </article>
+          </div>
+
+          <div class="hub-foot">
+            <p class="muted" id="hub-finish-note">两个实验都完成后，这里会出现「查看数据结论」。</p>
+            <button class="btn btn-gold" id="btn-hub-report" hidden>查看数据结论</button>
+          </div>
         </div>
       </section>
 
@@ -1409,6 +1467,137 @@ function pctRow({ label, value, pct, hint = `高于 ${Math.round((pct || 0) * 10
 return { barChart, groupedBar, dotPlot, effectBar, pctRow };
 })();
 
+/* ===== js/lib/pause.js ===== */
+const PAUSE = (function () {
+'use strict';
+
+// 实验内的暂停 / 退出：舞台左上角按钮 + Esc / P 快捷键
+//
+// 语义（刻意不做「冻结画面续算」）：
+//   · 暂停 = 立刻中断当前试次，这一试次作废；点「继续」后**重做**被打断的那一题
+//   · 退出 = 放弃本次实验，已做的数据不上传（否则 12/36 这种残缺记录会污染分析）
+//
+// 用法：
+//   const p = createPause(stage, { experiment: '实验一' });
+//   循环里的第一个 await 之前：if (p.quit) return { aborted: true };
+//                              if (p.paused) { if (await p.waitResume() === 'quit') return { aborted: true }; }
+//   试次里：const sig = p.interrupt;  // 函数入口处取一次，别在 await 之后再取
+//          sig.then(() => finish('pause'));  // finish 内部置 done，返回 null 表示本试次作废
+const ABORT = 'pause-abort';
+
+function createPause(stage, { experiment = '本实验', note = '' } = {}) {
+  const box = stage.box;
+  box.classList.add('has-pause');
+
+  // 防止暂停按钮的点击被实验里「点击位置」的 mousedown 监听吃掉
+  const eat = (e) => { e.stopPropagation(); };
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'stage-pause';
+  btn.title = '暂停 / 退出（Esc）';
+  btn.innerHTML = '<span>❚❚</span>暂停';
+  btn.addEventListener('mousedown', eat);
+  btn.addEventListener('click', (e) => { e.stopPropagation(); engage(); });
+  box.appendChild(btn);
+
+  let paused = false;
+  let quitFlag = false;
+  let pieces = [];
+  let waiters = [];
+  let resolveInt = null;
+  let interrupt = new Promise((r) => { resolveInt = r; });
+
+  const fireWaiters = (v) => { const ws = waiters; waiters = []; ws.forEach((f) => f(v)); };
+
+  const ctl = {
+    get paused() { return paused; },
+    get quit() { return quitFlag; },
+    get interrupt() { return interrupt; },
+    waitResume() {
+      if (!paused) return Promise.resolve(quitFlag ? 'quit' : 'go');
+      return new Promise((res) => waiters.push(res));
+    },
+    destroy() { cleanup(); },
+  };
+
+  function showCard() {
+    const veil = document.createElement('div');
+    veil.className = 'pause-veil';
+    veil.addEventListener('mousedown', eat);
+
+    const card = document.createElement('div');
+    card.className = 'pause-card';
+    card.addEventListener('mousedown', eat);
+    card.innerHTML = `<h2>已暂停</h2>
+      <p>${experiment}还没做完（当前进度会保留）。点「继续」会<b>从被打断的这一题重新开始</b>，刚才那次不算数。</p>
+      ${note ? `<p class="muted">${note}</p>` : ''}
+      <p class="muted">按 Esc 也可以继续。</p>
+      <div class="instr-actions">
+        <button class="btn btn-o" data-a="quit">退出${experiment}</button>
+        <button class="btn btn-gold" data-a="go">继续</button>
+      </div>`;
+    card.querySelector('[data-a="go"]').onclick = () => { resume(); };
+    card.querySelector('[data-a="quit"]').onclick = () => { quit(); };
+
+    box.appendChild(veil);
+    box.appendChild(card);
+    pieces = [veil, card];
+  }
+
+  function closeCard() {
+    pieces.forEach((el) => el.remove());
+    pieces = [];
+  }
+
+  function engage() {
+    if (paused || quitFlag) return;
+    paused = true;
+    resolveInt(ABORT);                        // 让当前试次立刻收手
+    interrupt = new Promise((r) => { resolveInt = r; });
+    showCard();
+  }
+
+  function resume() {
+    paused = false;
+    closeCard();
+    fireWaiters('go');
+  }
+
+  function quit() {
+    quitFlag = true;
+    paused = false;
+    closeCard();
+    fireWaiters('quit');
+    // 还开着的说明卡一并点掉，否则上层 await instruct() 会一直挂着
+    box.querySelectorAll('.instr-card').forEach((el) => {
+      const b = el.querySelector('button');
+      if (b) b.click();
+    });
+    cleanup();
+  }
+
+  function cleanup() {
+    window.removeEventListener('keydown', onKey, true);
+    closeCard();
+    btn.remove();
+    box.classList.remove('has-pause');
+  }
+
+  function onKey(e) {
+    if (e.code !== 'Escape' && e.code !== 'KeyP') return;
+    e.preventDefault(); e.stopPropagation();
+    if (quitFlag) return;
+    if (paused) resume(); else engage();
+  }
+  window.addEventListener('keydown', onKey, true);
+
+  return ctl;
+}
+
+return { ABORT, createPause };
+})();
+
 /* ===== js/exp/cb_scenes2.js ===== */
 const CB2MOD = (function () {
 'use strict';
@@ -1978,7 +2167,8 @@ function focusGuard(stage) {
 }
 
 // 等待按键：codes = { KeyF: 'F', KeyJ: 'J' }；返回 { key, rt }（rt 相对 t0）；超时返回 key=null
-function waitKey(codes, timeout, t0 = performance.now()) {
+// abort 传进来时（暂停信号），会立刻解绑监听并返回 { aborted: true }，避免残留的监听抢下一次按键
+function waitKey(codes, timeout, t0 = performance.now(), abort = null) {
   return new Promise((res) => {
     let to = null;
     const f = (e) => {
@@ -1991,6 +2181,7 @@ function waitKey(codes, timeout, t0 = performance.now()) {
     const done = (r) => { window.removeEventListener('keydown', f, true); clearTimeout(to); res(r); };
     window.addEventListener('keydown', f, true);
     if (timeout) to = setTimeout(() => done({ key: null, rt: null }), Math.max(0, timeout - (performance.now() - t0)));
+    if (abort) abort.then(() => done({ key: null, rt: null, aborted: true }));
   });
 }
 
@@ -2018,12 +2209,14 @@ const { sleep } = API;
 const { gazeSummary } = UPLOAD;
 const { drawPlaza, plazaLayout, personBox } = CB2MOD;
 const { focusGuard, hud } = W6;
+const { createPause } = PAUSE;
 // 实验一 · 变化盲（Rensink, O'Regan & Clark, 1997）+ 方向箭头线索（本作业的改进条件）
 // 素材：单一场景「商业广场」——6 个多场景版本每场景只有 2 试次，试次间无法比较，故改为单场景、
 //       变化（多出来的一个行人）的位置逐试次变化，其余画面逐像素相同。
 // 设计：3 线索条件（无箭头 / 有效 / 无效）× 12 试次 = 36，平衡随机；每个条件 ≥ 10 试次。
 //       「无箭头」是基线，有了它才能检验「加箭头到底有没有用」，而不只是「指对了有没有用」。
 // 流程与采集字段沿用课堂 Attention Lab：闪烁 240ms / 灰屏 160ms，空格报告觉察，再点击位置
+
 
 
 
@@ -2188,7 +2381,9 @@ function drawCue(ctx, t) {
 }
 
 /* ---------------- 单个试次 ---------------- */
-async function oneTrial(stage, hub, t, i, total, rec) {
+// pause 传进来时：试次可被中断，中断返回 null（调用方作废这一题、继续后重做）
+async function oneTrial(stage, hub, t, i, total, rec, pause) {
+  const sig = pause ? pause.interrupt : null;   // 入口处取一次，别在 await 之后再取
   const ctx = stage.ctx;
   ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, 1600, 900);
   hud(stage, `第 ${i + 1}/${total} 张 · ${t.cue_type === CUE_NONE ? '无箭头提示' : '记住箭头指向'}`, '发现变化 → 空格');
@@ -2204,15 +2399,15 @@ async function oneTrial(stage, hub, t, i, total, rec) {
   const t0 = rec ? hub.startRecording(stage) : performance.now();
   const onKey = (e) => { if (e.code === 'Space') { e.preventDefault(); if (resp === null) resp = Math.round(performance.now() - t0); } };
   window.addEventListener('keydown', onKey);
-  await new Promise((res) => {
+  const why = await new Promise((res) => {
     let done = false;
-    const finish = () => { if (done) return; done = true; clearInterval(wd); res(); };
+    const finish = (w) => { if (done) return; done = true; clearInterval(wd); res(w || 'end'); };
     // 看门狗：即使 rAF 被浏览器节流（切后台/无头环境），按键也能立即结束试次
-    const wd = setInterval(() => { if (resp !== null || performance.now() - t0 >= TIMEOUT_MS) finish(); }, 50);
+    const wd = setInterval(() => { if (resp !== null || performance.now() - t0 >= TIMEOUT_MS) finish('end'); }, 50);
     const loop = () => {
       if (done) return;
       const el = performance.now() - t0;
-      if (resp !== null || el >= TIMEOUT_MS) return finish();
+      if (resp !== null || el >= TIMEOUT_MS) return finish('end');
       const ph = el % cyc;
       if (ph < ON_MS) ctx.drawImage(first, 0, 0, 1600, 900);
       else if (ph < ON_MS + BLANK_MS) { ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, 1600, 900); }
@@ -2222,23 +2417,30 @@ async function oneTrial(stage, hub, t, i, total, rec) {
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
+    if (sig) sig.then(() => finish('pause'));
   });
   window.removeEventListener('keydown', onKey);
   const g = rec ? hub.stopRecording() : null;
+  if (why === 'pause') return null;
 
   // 报告位置
   let click = null;
   if (resp !== null) {
     ctx.drawImage(second, 0, 0, 1600, 900);
     stage.setHud('<div class="hud-tl">请点击你看到变化的位置</div>');
-    click = await new Promise((res) => {
+    const got = await new Promise((res) => {
+      let done = false;
       const f = (e) => {
+        if (done) return; done = true;
         stage.box.removeEventListener('mousedown', f);
         const [x, y] = stage.toNorm(e.clientX, e.clientY);
         res([+x.toFixed(4), +y.toFixed(4)]);
       };
       stage.box.addEventListener('mousedown', f);
+      if (sig) sig.then(() => { if (done) return; done = true; stage.box.removeEventListener('mousedown', f); res(null); });
     });
+    if (got === null) { stage.setHud(''); return null; }
+    click = got;
   }
 
   // 反馈
@@ -2286,19 +2488,36 @@ async function run({ stage, hub, subject }) {
     <p>同一张广场画面会和「多了一个行人」的版本快速交替闪烁，中间夹着灰屏。变化就是<b>多出来的那个人</b>，每张图它的位置都不一样。</p>
     <p>每个试次开始前，屏幕中央可能出现一个<b>金色箭头</b>，指向变化的大致方位。<b>有些试次没有箭头</b>，只有中央注视点；有箭头时它也不一定指对。</p>
     <p>一旦发现变化，<b>立即按空格键</b>，然后用<b>鼠标点击</b>那个多出来的人。每张最多 ${TIMEOUT_MS / 1000} 秒。</p>
-    <p class="muted">共 ${list.length} 张（无箭头 / 指向正确 / 指向相反，各 ${N_PER_CUE} 张，顺序随机），约 5–6 分钟。灰屏 ${BLANK_MS} ms、对比度 ${Math.round(CONTRAST * 100)}%。${rec ? '摄像头眼动已开启：会记录每张图上的注视汇总。' : '未启用摄像头：只记录按键、点击与时间。'}</p>`, '开始实验一');
+    <p class="muted">共 ${list.length} 张（无箭头 / 指向正确 / 指向相反，各 ${N_PER_CUE} 张，顺序随机），约 5–6 分钟。灰屏 ${BLANK_MS} ms、对比度 ${Math.round(CONTRAST * 100)}%。${rec ? '摄像头眼动已开启：会记录每张图上的注视汇总。' : '未启用摄像头：只记录按键、点击与时间。'}</p>
+    <p class="muted">中途想停：点左上角「暂停」或按 Esc。</p>`, '开始实验一');
 
+  const pause = createPause(stage, {
+    experiment: '实验一',
+    note: '退出后本次数据不会上传；休息一下再点「开始实验一」即可重来。',
+  });
   const guard = focusGuard(stage);
   const trials = [];
+  const bail = () => ({ aborted: true, trials, summary: { n: 0, detected: 0, located: 0, subject } });
   try {
     for (let i = 0; i < list.length; i++) {
-      trials.push(await oneTrial(stage, hub, list[i], i, list.length, rec));
+      if (pause.quit) return bail();
+      if (pause.paused && await pause.waitResume() === 'quit') return bail();
+
+      const row = await oneTrial(stage, hub, list[i], i, list.length, rec, pause);
+      if (row === null) {                       // 被暂停打断 → 这一题作废，继续后重做
+        if (await pause.waitResume() === 'quit') return bail();
+        i--;
+        continue;
+      }
+      trials.push(row);
+
       if (i === 11 || i === 23) {
         await instruct(stage, `<h2>第 ${i === 11 ? 1 : 2}/3 段完成</h2><p>休息一下。后面还是同一个广场，只是多出来的那个人会换位置。</p>`, '继续');
       }
     }
   } finally {
     guard.done();
+    pause.destroy();
     stage.setHud('');
   }
   const okN = trials.filter((t) => t.resp_ms !== null).length;
@@ -2319,9 +2538,11 @@ const YAHCUED = (function () {
 const { instruct } = INSTRUCT;
 const { sleep } = API;
 const { focusGuard, hud, waitKey, shuffle, nextFrame, kbd, probe } = W6;
+const { createPause } = PAUSE;
 // 实验二 ·「你在这里」地图（Levine, 1982）+ 朝向提示（本作业的改进）
 // 改进：新增「你在图中面朝哪个方向」的半透明红色视锥。2（有/无提示）× 3（地图旋转 0/90/180°）× 8 = 48 试次
 // DV：反应时、正确率、系统性错误（把「地图上方」当成「前方」作答的比例）
+
 
 
 
@@ -2465,9 +2686,16 @@ async function run({ stage, subject }) {
     <p>⚠️ 导览图不一定是"正着"挂的。有些试次地图上会出现<b style="color:#c62828">红色扇形</b>，表示你在地图上面朝的方向——但<b>不是每个试次都有</b>。</p>
     <p class="muted">先练习 ${PRACTICE} 次（有提示），再正式 ${trials.length} 次，约 5 分钟。答得又快又准。</p>`, '开始实验二');
 
+  const pause = createPause(stage, {
+    experiment: '实验二',
+    note: '退出后本次数据不会上传；休息一下再点「开始实验二」即可重来。',
+  });
   const guard = focusGuard(stage), ctx = stage.ctx;
   const rows = [];
-  const one = async (t, practice) => {
+  const bail = () => ({ aborted: true, trials: rows, summary: { n: 0, correct: 0, acc: 0, subject } });
+
+  // 被暂停打断时返回 null（该题作废，继续后重做）
+  const one = async (t, practice, sig) => {
     ctx.fillStyle = '#1b1f27'; ctx.fillRect(0, 0, 1600, 900);
     ctx.fillStyle = '#cfd6e2'; ctx.font = `600 40px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('+', 800, 450);
@@ -2475,8 +2703,9 @@ async function run({ stage, subject }) {
     drawYah(ctx, t.names, t.rot, t.dir, { cue: !!t.cue }); await safeFrame();
     const t0 = performance.now();
     probe({ exp: 'yah', expect: t.dir, rot: t.rot, cue: t.cue });
-    const r = await waitKey(KEYS, TIMEOUT_MS, t0);
+    const r = await waitKey(KEYS, TIMEOUT_MS, t0, sig);
     probe(null);
+    if (r.aborted) { stage.setHud(''); return null; }
     const ok = r.key === t.dir;
     stage.setHud(`<div class="center-msg" style="color:${r.key == null ? '#ffd54a' : ok ? '#7CFC9A' : '#ff8a80'}">${r.key == null ? '太慢了' : ok ? '✓' : `✗ 在你的${DIR_CN[t.dir]}`}</div>`);
     await sleep(practice ? 1100 : 420);
@@ -2493,18 +2722,31 @@ async function run({ stage, subject }) {
     };
   };
 
+  // 每一题开头检查一次：暂停中就先挂住，退出则整段作废
+  const gate = async () => {
+    if (pause.quit) return 'quit';
+    if (pause.paused && await pause.waitResume() === 'quit') return 'quit';
+    return 'go';
+  };
+
   try {
     for (let k = 0; k < PRACTICE; k++) {
+      if (await gate() === 'quit') return bail();
       const p = makeTrial(1, k === 0 ? 0 : 180, k === 0 ? 'L' : 'R', LANDMARKS);
       hud(stage, `练习 ${k + 1}/${PRACTICE}`, '↑ 前 ↓ 后 ← 左 → 右');
-      await one(p, true);
+      const row = await one(p, true, pause.interrupt);
+      if (row === null) { if (await pause.waitResume() === 'quit') return bail(); k--; continue; }
     }
+    if (await gate() === 'quit') return bail();
     await instruct(stage, '<h2>练习结束</h2><p>正式开始，共 48 次。<b>有的地图有红色朝向扇形，有的没有</b>——没有的时候请自己判断方向。', '开始');
     for (let k = 0; k < trials.length; k++) {
+      if (await gate() === 'quit') return bail();
       hud(stage, `${k + 1}/${trials.length}`, '↑ 前 ↓ 后 ← 左 → 右');
-      rows.push(await one(trials[k], false));
+      const row = await one(trials[k], false, pause.interrupt);
+      if (row === null) { if (await pause.waitResume() === 'quit') return bail(); k--; continue; }
+      rows.push(row);
     }
-  } finally { guard.done(); stage.setHud(''); }
+  } finally { guard.done(); pause.destroy(); stage.setHud(''); }
 
   const okN = rows.filter((r) => r.correct).length;
   return {
@@ -3558,7 +3800,6 @@ const APP = (function () {
 'use strict';
 const { toast } = API;
 const { Stage } = STAGE;
-const { ask } = INSTRUCT;
 const { submitData, downloadCSV, PROJECTS, suggestParticipant } = UPLOAD;
 const { GazeHub } = GAZE;
 const { runCalibration, ERR_LIMIT_PX } = CALIB;
@@ -3567,8 +3808,7 @@ const YAH = YAHCUED;
 const { main: renderResults } = RESULTS;
 const { main: renderAnalysis } = ANALYSIS;
 const { main: renderReport } = REPORT;
-// 主控：被试信息 →（可选）摄像头眼动 + 9 点校准 → 实验一 → 上传 → 实验二 → 上传 → 结束
-
+// 主控：被试信息 →（可选）摄像头眼动 + 9 点校准 → 实验选择 → 实验一 / 实验二 → 数据结论
 
 
 
@@ -3581,7 +3821,7 @@ const { main: renderReport } = REPORT;
 
 
 const $ = (id) => document.getElementById(id);
-const state = { sid: '', name: '', cb: null, yah: null, calibErr: null, lowQuality: false };
+const state = { sid: '', name: '', cb: null, yah: null, calibErr: null, lowQuality: false, eyeAsked: false };
 
 function show(id) {
   document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
@@ -3611,13 +3851,18 @@ else if (/(^|[#/])analysis/.test(location.hash)) showView('analysis', { reload: 
 else if (/(^|[#/])results/.test(location.hash)) showView('results');
 const refreshBtn = $('btn-results-refresh');
 if (refreshBtn) refreshBtn.onclick = () => showView('results', { reload: true });
-if ($('btn-analysis')) $('btn-analysis').onclick = () => showView('report', { reload: true });
-if ($('btn-analysis-back')) $('btn-analysis-back').onclick = () => showView('lab');
+if ($('btn-analysis-back')) $('btn-analysis-back').onclick = () => goLab();
 if ($('btn-analysis-group')) $('btn-analysis-group').onclick = () => showView('results', { reload: true });
-if ($('btn-report-back')) $('btn-report-back').onclick = () => showView('lab');
+if ($('btn-report-back')) $('btn-report-back').onclick = () => goLab();
 if ($('btn-report-detail')) $('btn-report-detail').onclick = () => openAnalysis();
 
-/* ---------------- 登录 → 选择是否开启眼动 ---------------- */
+// 从结果类页面回到「实验选择」；没登录过就回登录页
+function goLab() {
+  showView('lab');
+  if (state.sid) showHub(); else show('screen-login');
+}
+
+/* ---------------- 登录 → 实验选择 ---------------- */
 $('btn-login').onclick = () => {
   const sid = $('in-sid').value.trim();
   const name = $('in-name').value.trim();
@@ -3625,7 +3870,7 @@ $('btn-login').onclick = () => {
   $('login-err').textContent = '';
   state.sid = sid; state.name = name;
   try { localStorage.setItem('hw2_name', name); } catch (e) { /* ignore */ }
-  show('screen-consent');
+  showHub();
 };
 $('in-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-login').click(); });
 
@@ -3640,8 +3885,61 @@ $('in-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-
   if (hint) hint.textContent = `已按后端 ${s.n} 名被试预填 ${s.sid}，可手动改。`;
 })();
 
+/* ---------------- 实验选择（hub） ---------------- */
+function showHub() {
+  showView('lab');
+  updateHub();
+  show('screen-hub');
+  try { window.scrollTo(0, 0); } catch (e) { /* ignore */ }
+}
+
+function setCard(key, label, done, doneText, idleText) {
+  const card = $('hub-card-' + key), badge = $('hub-badge-' + key);
+  const meta = $('hub-meta-' + key), btn = $('btn-start-' + key);
+  if (!card) return;
+  card.classList.toggle('done', done);
+  badge.classList.toggle('done', done);
+  badge.textContent = done ? '已完成' : '未开始';
+  meta.textContent = done ? doneText : idleText;
+  btn.textContent = (done ? '重做' : '开始') + label;
+}
+
+function updateHub() {
+  const cb = state.cb, yah = state.yah;
+  const sidEl = $('hub-sid');
+  if (sidEl) sidEl.textContent = state.sid ? `当前被试 ${state.sid}。` : '';
+
+  setCard('cb', '实验一', !!cb,
+    cb ? `已完成 · 觉察 ${cb.summary.detected}/${cb.summary.n}，定位正确 ${cb.summary.located}` : '',
+    '36 试次 · 约 5–6 分钟');
+  setCard('yah', '实验二', !!yah,
+    yah ? `已完成 · 正确率 ${(yah.summary.acc * 100).toFixed(0)}%（${yah.summary.correct}/${yah.summary.n}）` : '',
+    '2 练习 + 48 试次 · 约 5 分钟');
+
+  const missing = (cb ? 0 : 1) + (yah ? 0 : 1);
+  const btn = $('btn-hub-report'), note = $('hub-finish-note');
+  if (btn) btn.hidden = missing > 0;
+  if (note) {
+    note.textContent = missing === 0
+      ? '两个实验都完成了，谢谢参与！可以去看数据结论。'
+      : `还剩 ${missing} 个实验没做，做完后这里会出现「查看数据结论」。`;
+  }
+}
+
+$('btn-start-cb').onclick = () => {
+  if (!state.eyeAsked) { show('screen-consent'); return; }   // 只有实验一用到眼动
+  runExp('cb');
+};
+$('btn-start-yah').onclick = () => runExp('yah');
+$('btn-consent-back').onclick = () => showHub();
+$('btn-hub-report').onclick = () => showView('report', { reload: true });
+
 /* ---------------- 摄像头眼动（可选，失败不阻塞流程） ---------------- */
-$('btn-nocam').onclick = () => { GazeHub.mode = null; startAll(); };
+function afterEyeDecision() {
+  state.eyeAsked = true;
+  runExp('cb');
+}
+$('btn-nocam').onclick = () => { GazeHub.mode = null; afterEyeDecision(); };
 
 $('btn-cam').onclick = async () => {
   const st = $('cam-status');
@@ -3653,7 +3951,7 @@ $('btn-cam').onclick = async () => {
     st.textContent = '摄像头已就绪，进入校准。';
     await calibrateFlow();
     GazeHub.showPreview(false);
-    startAll();
+    afterEyeDecision();
   } catch (e) {
     GazeHub.mode = null;
     GazeHub.wg = null;
@@ -3700,39 +3998,41 @@ async function calibrateFlow() {
   }
 }
 
-/* ---------------- 实验主流程 ---------------- */
-async function startAll() {
+/* ---------------- 跑一个实验 → 上传 → 回选择界面 ---------------- */
+let running = false;
+
+async function runExp(which) {
+  if (running) return;
+  running = true;
   show('');
   const stage = new Stage();
   window.__stage = stage;
   const eyeOn = GazeHub.mode === 'webgazer';
+  let note = null;
 
-  // 实验一
-  const r1 = await CB.run({ stage, hub: GazeHub, subject: state.sid });
-  state.cb = r1;
-  const uploaded1 = await upload(stage, PROJECTS.cb, 'changeblind_cue_arrow', r1, eyeOn ? 'webgazer' : 'mouse');
-  const go = await ask(stage,
-    `<h2>实验一完成</h2>
-     <p>你共看了 ${r1.trials.length} 张图，报告觉察 ${r1.summary.detected} 次，定位正确 ${r1.summary.located} 次。</p>
-     <p>${uploaded1 ? `数据已上传（本项目累计 <b>${uploaded1.participants}</b> 人）。` : '数据上传失败，本地已下载 CSV 备份。'}</p>
-     ${eyeOn ? `<p class="muted">眼动已记录：每张图的平均注视坐标会上传（校准误差约 ${state.calibErr != null ? Math.round(state.calibErr) + ' px' : '未知'}）。</p>` : ''}
-     <p>是否继续做<b>实验二</b>（「你在这里」地图，约 5 分钟）？</p>`,
-    [{ label: '继续实验二', value: 'go', cls: 'btn-gold' }, { label: '到此结束', value: 'stop', cls: 'btn-o' }]);
-  if (go === 'stop') { stage.destroy(); return finish(); }
-
-  // 实验二
-  const r2 = await YAH.run({ stage, subject: state.sid });
-  state.yah = r2;
-  const uploaded2 = await upload(stage, PROJECTS.yah, 'yah_heading_cue', r2, 'within');
-  const after = await ask(stage,
-    `<h2>实验二完成</h2>
-     <p>共 ${r2.trials.length} 次，正确 ${r2.summary.correct} 次（正确率 ${(r2.summary.acc * 100).toFixed(0)}%）。</p>
-     <p>${uploaded2 ? `数据已上传（本项目累计 <b>${uploaded2.participants}</b> 人）。` : '数据上传失败，本地已下载 CSV 备份。'}</p>
-     <p>两个实验都完成了，谢谢你的参与！要不要现在看一下分析结果？</p>`,
-    [{ label: '查看分析报告', value: 'report', cls: 'btn-gold' }, { label: '结束', value: 'ok', cls: 'btn-o' }]);
-  stage.destroy();
-  finish();
-  if (after === 'report') { showView('report', { reload: true }); }
+  try {
+    if (which === 'cb') {
+      const r = await CB.run({ stage, hub: GazeHub, subject: state.sid });
+      if (r.aborted) { note = { msg: '已退出实验一，本次数据未上传。', type: 'err' }; return; }
+      state.cb = r;
+      const up = await upload(stage, PROJECTS.cb, 'changeblind_cue_arrow', r, eyeOn ? 'webgazer' : 'mouse');
+      note = { msg: up ? `实验一完成，数据已上传（本项目累计 ${up.participants} 人）。` : '实验一完成，但上传失败，已下载 CSV 备份。', type: up ? 'ok' : 'err' };
+    } else {
+      const r = await YAH.run({ stage, subject: state.sid });
+      if (r.aborted) { note = { msg: '已退出实验二，本次数据未上传。', type: 'err' }; return; }
+      state.yah = r;
+      const up = await upload(stage, PROJECTS.yah, 'yah_heading_cue', r, 'within');
+      note = { msg: up ? `实验二完成，数据已上传（本项目累计 ${up.participants} 人）。` : '实验二完成，但上传失败，已下载 CSV 备份。', type: up ? 'ok' : 'err' };
+    }
+  } catch (e) {
+    console.error('[runExp]', e);
+    note = { msg: '实验出错：' + (e.message || e), type: 'err' };
+  } finally {
+    try { stage.destroy(); } catch (e) { /* ignore */ }
+    running = false;
+    showHub();
+    if (note) toast(note.msg, note.type, 6000);
+  }
 }
 
 async function upload(stage, project, experiment, result, condition) {
@@ -3742,7 +4042,7 @@ async function upload(stage, project, experiment, result, condition) {
     calib_err_px: state.calibErr != null ? Math.round(state.calibErr) : null,
     low_quality: state.lowQuality ? 1 : 0,
   });
-  stage.setHud('<div class="hud-tl">正在上传数据…</div>');
+  stage.setHud('<div class="hud-tl" style="left:116px">正在上传数据…</div>');
   try {
     const r = await submitData(project, experiment, state.sid || 'anonymous', rows, condition, meta);
     stage.setHud('');
@@ -3755,18 +4055,12 @@ async function upload(stage, project, experiment, result, condition) {
   }
 }
 
-/* ---------------- 结束页：只显示「实验结束，感谢参与」 ---------------- */
-function finish() {
-  show('screen-final');
-  try { window.scrollTo(0, 0); } catch (e) { /* ignore */ }
-}
-
 return {  };
 })();
 
 // 调试口：便于在控制台复用模块、也供自动自检使用
 
-window.__hw2 = { API, STAGE, GAZE, CALIB, INSTRUCT, UPLOAD, STATS, CHART, SCENES, CB2MOD, CBCUED, YAHCUED, W6, RESULTS, ANALYSIS, REPORT };
+window.__hw2 = { API, STAGE, GAZE, CALIB, INSTRUCT, UPLOAD, STATS, CHART, PAUSE, SCENES, CB2MOD, CBCUED, YAHCUED, W6, RESULTS, ANALYSIS, REPORT };
 
 })();
 </script>
