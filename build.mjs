@@ -26,6 +26,7 @@ const MODS = [
   ['js/exp/cb_cued.js', 'CBCUED'],
   ['js/exp/yah_cued.js', 'YAHCUED'],
   ['js/results.js', 'RESULTS'],
+  ['js/analysis.js', 'ANALYSIS'],
   ['js/app.js', 'APP'],
 ];
 
@@ -84,7 +85,7 @@ const code = [
   "'use strict';",
   ...MODS.map(([f]) => bundleModule(f)),
   '// 调试口：便于在控制台复用模块、也供自动自检使用',
-  'window.__hw2 = { API, STAGE, GAZE, CALIB, INSTRUCT, UPLOAD, SCENES, CBCUED, YAHCUED, W6, RESULTS };',
+  'window.__hw2 = { API, STAGE, GAZE, CALIB, INSTRUCT, UPLOAD, SCENES, CB2MOD, CBCUED, YAHCUED, W6, RESULTS, ANALYSIS };',
   '})();',
 ].join('\n\n').replace(/<\/script/gi, '<\\/script');
 

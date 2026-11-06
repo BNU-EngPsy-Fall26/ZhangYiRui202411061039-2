@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>实验一素材预览 · 广场 + 多出来的那个人</title>
+<style>
+  body { margin: 0; background: #1b1f27; color: #cfd6e2; font: 14px/1.6 "PingFang SC","Microsoft YaHei",sans-serif; padding: 20px; }
+  h1 { font-size: 20px; margin: 0 0 6px; color: #e8eef7; }
+  .hint { color: #8b97ab; font-size: 13px; margin-bottom: 16px; }
+  .hint b { color: #d8b95e; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid #2c3444; }
+  .cell { position: relative; }
+  canvas { width: 100%; display: block; border-radius: 8px; background: #808080; }
+  .tag { position: absolute; left: 8px; top: 6px; background: rgba(13,43,92,.82); color: #fff; font-size: 12px; padding: 2px 8px; border-radius: 4px; }
+  .tag.b { background: rgba(160,40,40,.85); }
+  .meta { grid-column: 1 / -1; color: #8b97ab; font-size: 12.5px; margin-top: 4px; }
+  button { background: #2c3444; color: #cfd6e2; border: 1px solid #3c4658; border-radius: 8px; padding: 7px 14px; cursor: pointer; font-size: 13px; margin-right: 8px; }
+  button:hover { background: #37415a; }
+</style>
+</head>
+<body>
+<h1>实验一素材预览</h1>
+<div class="hint">
+  上排 = 原图（无人），下排 = 改图（多一个红行人）。<b>两张图除了那个人以外逐像素相同</b>，变化位置逐试次随机。<br>
+  点「换一组」重新抽 6 个试次，点「显示判定框」看点击判定区域（行人包围盒 ±32 px）。
+</div>
+<div>
+  <button id="b1">换一组</button>
+  <button id="b2">显示判定框</button>
+</div>
+<div id="out" style="margin-top:16px"></div>
+
+<script type="module">
+import { drawPlaza, plazaLayout, personBox } from '../js/exp/cb_scenes2.js';
+
+const out = document.getElementById('out');
+let showBox = false;
+const TYPE_CN = ['无箭头', '箭头指对', '箭头指反'];
+const N = 6;
+
+const inFountain = (x, y) => ((x - 800) / 245) ** 2 + ((y - 630) / 110) ** 2 < 1;
+
+function pickSpots(n) {
+  const { people } = plazaLayout();
+  const cells = [];
+  const COLS = 8, ROWS = 7;
+  for (let ci = 0; ci < COLS; ci++) for (let ri = 0; ri < ROWS; ri++) {
+    const cx = 130 + (1470 - 130) * (ci + 0.5) / COLS;
+    const cy = 450 + (780 - 450) * (ri + 0.5) / ROWS;
+    if (!inFountain(cx, cy)) cells.push([cx, cy]);
+  }
+  cells.sort(() => Math.random() - 0.5);
+  return cells.slice(0, n).map(([x, y]) => ({ x, y, s: 20 + (y - 380) / 8 }));
+}
+
+function render() {
+  const spots = pickSpots(N);
+  out.innerHTML = '';
+  spots.forEach((sp, i) => {
+    const row = document.createElement('div');
+    row.className = 'row';
+
+    [false, true].forEach((changed) => {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const cv = document.createElement('canvas');
+      cv.width = 1600; cv.height = 900;
+      const c = cv.getContext('2d');
+      drawPlaza(c, changed ? sp : null);
+      if (showBox) {
+        const [bx, by, bw, bh] = personBox(sp.x, sp.y, sp.s);
+        c.strokeStyle = '#C8A44A'; c.lineWidth = 6;
+        c.strokeRect(bx - 32, by - 32, bw + 64, bh + 64);
+      }
+      const tag = document.createElement('div');
+      tag.className = 'tag' + (changed ? ' b' : '');
+      tag.textContent = changed ? '改图：多一个人' : '原图';
+      cell.appendChild(cv); cell.appendChild(tag);
+      row.appendChild(cell);
+    });
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const [bx, by, bw, bh] = personBox(sp.x, sp.y, sp.s);
+    const ecc = Math.round(Math.hypot(sp.x - 800, sp.y - 450));
+    meta.textContent = `试次 ${i + 1} · 变化点 (${Math.round(sp.x)}, ${Math.round(sp.y)}) · 行人高度 ${Math.round(sp.s * 1.8)} px · 判定框 ${Math.round(bw)}×${Math.round(bh)} px · 离屏幕中心 ${ecc} px · 线索条件（示例）${TYPE_CN[i % 3]}`;
+    row.appendChild(meta);
+    out.appendChild(row);
+  });
+}
+
+document.getElementById('b1').onclick = render;
+document.getElementById('b2').onclick = () => { showBox = !showBox; document.getElementById('b2').textContent = showBox ? '隐藏判定框' : '显示判定框'; render(); };
+render();
+</script>
+</body>
+</html>

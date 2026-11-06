@@ -1,4 +1,4 @@
-// 结果页：从课程服务器读取两个实验的匿名数据并汇总
+// 全班汇总页：从课程服务器读取两个实验的匿名数据并汇总（被试级 + 条件级）
 import { loadAll, PROJECTS } from './lib/upload.js';
 
 const $ = (id) => document.getElementById(id);
@@ -29,41 +29,47 @@ export async function main() {
 }
 
 /* ---------------- 实验一 ---------------- */
+const CUE_NAME = { 0: '无箭头（基线）', 1: '箭头指向正确', 2: '箭头指向相反' };
+const cueOf = (t) => (t.cue_type != null && t.cue_type !== '' ? +t.cue_type : (+t.cue_valid === 1 ? 1 : 0));
+
 function renderCB(records) {
   const box = $('cb-box');
   const trials = [];
   records.forEach((r) => (r.trials || []).forEach((t) => trials.push(t)));
   if (!trials.length) { box.innerHTML = '<p class="note">暂无数据。完成一次实验一并上传后会出现在这里。</p>'; return; }
 
-  const grp = (v) => trials.filter((t) => +t.cue_valid === v);
-  const stat = (a) => {
-    const det = a.filter((t) => t.resp_ms != null && t.resp_ms !== ''); 
+  const stat = (c) => {
+    const a = trials.filter((t) => cueOf(t) === c);
+    const det = a.filter((t) => t.resp_ms != null && t.resp_ms !== '');
     const rts = det.map((t) => +t.resp_ms);
     const loc = a.filter((t) => +t.click_ok === 1).length;
-    return { n: a.length, detected: det.length, rt: mean(rts), loc_rate: a.length ? loc / a.length : null };
+    return { n: a.length, detected: det.length, rt: mean(rts), loc_rate: det.length ? loc / det.length : null };
   };
-  const V = stat(grp(1)), I = stat(grp(0));
-  const maxRt = Math.max(V.rt || 0, I.rt || 0);
+  const S = [stat(0), stat(1), stat(2)];
+  const maxRt = Math.max(...S.map((s) => s.rt || 0), 1);
 
   box.innerHTML = `
     <table>
-      <tr><th>箭头提示</th><th>试次数</th><th>觉察率</th><th>平均觉察时间</th><th>定位正确率</th></tr>
-      <tr><td>指向正确（75% 的试次）</td><td>${V.n}</td><td>${pct(V.detected / V.n)}</td><td>${ms(V.rt)}</td><td>${pct(V.loc_rate)}</td></tr>
-      <tr><td>指向相反（25% 的试次）</td><td>${I.n}</td><td>${pct(I.detected / I.n)}</td><td>${ms(I.rt)}</td><td>${pct(I.loc_rate)}</td></tr>
+      <tr><th>线索条件</th><th>试次数</th><th>觉察率</th><th>平均觉察时间</th><th>定位正确率</th></tr>
+      ${[0, 1, 2].map((c) => `<tr><td>${CUE_NAME[c]}</td><td>${S[c].n}</td>
+        <td>${pct(S[c].detected / Math.max(1, S[c].n))}</td><td>${ms(S[c].rt)}</td><td>${pct(S[c].loc_rate)}</td></tr>`).join('')}
     </table>
     <div style="margin-top:14px">
       <div class="note" style="margin-bottom:4px">平均觉察时间对比（条越长越慢）</div>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:13px"><span style="width:150px">箭头有效</span><div style="flex:1">${bar(V.rt || 0, maxRt)}</div><span style="width:70px;text-align:right">${ms(V.rt)}</span></div>
-      <div style="display:flex;align-items:center;gap:10px;font-size:13px"><span style="width:150px">箭头无效</span><div style="flex:1">${bar(I.rt || 0, maxRt)}</div><span style="width:70px;text-align:right">${ms(I.rt)}</span></div>
+      ${[0, 1, 2].map((c) => `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:13px">
+        <span style="width:150px">${CUE_NAME[c]}</span><div style="flex:1">${bar(S[c].rt || 0, maxRt)}</div>
+        <span style="width:80px;text-align:right">${ms(S[c].rt)}</span></div>`).join('')}
     </div>
-    <p class="note" style="margin-top:12px">每位被试 12 试次（6 场景 × 2 轮），其中 9 次箭头有效、3 次指反。差异方向与大小可以直接对照作业里的预测①。</p>`;
+    <p class="note" style="margin-top:12px">每位被试 36 试次（单一广场场景，变化位置逐试次随机），三个线索条件各 12 试次。「无箭头」是基线，用来检验「加箭头有没有用」，而不只是「指对了有没有用」。</p>`;
 }
 
 /* ---------------- 实验二 ---------------- */
+const RT_FLOOR = 200;   // 低于此视为抢答（注视点出现前就按键）
+
 function renderYAH(records) {
   const box = $('yah-box');
   const trials = [];
-  records.forEach((r) => (r.trials || []).forEach((t) => trials.push(t)));
+  records.forEach((r) => (r.trials || []).forEach((t) => { if (t.rt == null || t.rt === '' || +t.rt >= RT_FLOOR) trials.push(t); }));
   if (!trials.length) { box.innerHTML = '<p class="note">暂无数据。完成一次实验二并上传后会出现在这里。</p>'; return; }
 
   const cells = [];
@@ -98,7 +104,7 @@ function renderYAH(records) {
       <tr><th>提示条件</th><th>旋转 0°</th><th>旋转 90°</th><th>旋转 180°</th><th>RT 增幅 (180−0)</th></tr>
       ${rows}
     </table>
-    <div style="margin-top:14px"><div class="note" style="margin-bottom:4px">各条件平均反应时</div>${bars}</div>
+    <div style="margin-top:14px"><div class="note" style="margin-bottom:4px">各条件平均反应时（已剔除 RT &lt; ${RT_FLOOR} ms 的抢答试次）</div>${bars}</div>
     <p class="note" style="margin-top:12px">每人 48 试次（2 提示 × 3 旋转 × 8）。预测②③：有提示时「旋转 180° − 旋转 0°」的 RT 差应明显小于无提示条件；系统性错误率也应在有提示时下降。</p>`;
 }
 

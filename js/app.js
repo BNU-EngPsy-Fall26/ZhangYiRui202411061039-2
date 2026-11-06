@@ -8,6 +8,7 @@ import { runCalibration, ERR_LIMIT_PX } from './gaze/calibration.js';
 import * as CB from './exp/cb_cued.js';
 import * as YAH from './exp/yah_cued.js';
 import { main as renderResults } from './results.js';
+import { main as renderAnalysis } from './analysis.js';
 
 const $ = (id) => document.getElementById(id);
 const state = { sid: '', name: '', cb: null, yah: null, calibErr: null, lowQuality: false };
@@ -16,17 +17,30 @@ function show(id) {
   document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === id));
 }
 
-/* ---------------- 视图：实验 / 结果（结果页不给被试入口，只能用 #/results 打开） ---------------- */
+/* ---------------- 视图：实验 / 全班汇总 / 我的数据分析 ---------------- */
 let resultsLoaded = false;
+let analysisLoaded = false;
+let analysisCtx = null;
 
 function showView(v, { reload = false } = {}) {
   document.querySelectorAll('.view').forEach((s) => s.classList.toggle('active', s.id === 'view-' + v));
   if (v === 'results' && (!resultsLoaded || reload)) { resultsLoaded = true; renderResults(); }
+  if (v === 'analysis' && (!analysisLoaded || reload)) { analysisLoaded = true; renderAnalysis(analysisCtx || {}); }
+  try { window.scrollTo(0, 0); } catch (e) { /* ignore */ }
 }
 
-if (/(^|[#/])results/.test(location.hash)) showView('results');
+function openAnalysis() {
+  analysisCtx = { cb: state.cb, yah: state.yah, sid: state.sid };
+  showView('analysis', { reload: true });
+}
+
+if (/(^|[#/])analysis/.test(location.hash)) showView('analysis', { reload: true });
+else if (/(^|[#/])results/.test(location.hash)) showView('results');
 const refreshBtn = $('btn-results-refresh');
 if (refreshBtn) refreshBtn.onclick = () => showView('results', { reload: true });
+if ($('btn-analysis')) $('btn-analysis').onclick = () => openAnalysis();
+if ($('btn-analysis-back')) $('btn-analysis-back').onclick = () => showView('lab');
+if ($('btn-analysis-group')) $('btn-analysis-group').onclick = () => showView('results', { reload: true });
 
 /* ---------------- 登录 → 选择是否开启眼动 ---------------- */
 $('btn-login').onclick = () => {
@@ -124,14 +138,15 @@ async function startAll() {
   const r2 = await YAH.run({ stage, subject: state.sid });
   state.yah = r2;
   const uploaded2 = await upload(stage, PROJECTS.yah, 'yah_heading_cue', r2, 'within');
-  await ask(stage,
+  const after = await ask(stage,
     `<h2>实验二完成</h2>
      <p>共 ${r2.trials.length} 次，正确 ${r2.summary.correct} 次（正确率 ${(r2.summary.acc * 100).toFixed(0)}%）。</p>
      <p>${uploaded2 ? `数据已上传（本项目累计 <b>${uploaded2.participants}</b> 人）。` : '数据上传失败，本地已下载 CSV 备份。'}</p>
-     <p>两个实验都完成了，谢谢你的参与！</p>`,
-    [{ label: '完成', value: 'ok', cls: 'btn-gold' }]);
+     <p>两个实验都完成了，谢谢你的参与！要不要现在看一下分析结果？</p>`,
+    [{ label: '查看数据分析', value: 'analysis', cls: 'btn-gold' }, { label: '结束', value: 'ok', cls: 'btn-o' }]);
   stage.destroy();
   finish();
+  if (after === 'analysis') openAnalysis();
 }
 
 async function upload(stage, project, experiment, result, condition) {

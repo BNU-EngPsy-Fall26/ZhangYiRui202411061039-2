@@ -31,6 +31,12 @@ for (const [needle, label] of [
   ['screen-consent', 'consent screen'],
   ['btn-cam', 'camera button'],
   ['gaze_qc', 'gaze_qc field'],
+  ['plazaLayout', 'single-scene plaza layout'],
+  ['cue_type', '3-level cue condition field'],
+  ['analysis-body', 'analysis view'],
+  ['btn-analysis', 'analysis entry button'],
+  ['Cohen', "Cohen's d label"],
+  ['Rensink', 'original-paper reference'],
   ['no consent', 'x'],
 ]) {
   if (label === 'x') continue;

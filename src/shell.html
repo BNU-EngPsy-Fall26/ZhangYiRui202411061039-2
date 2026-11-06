@@ -31,20 +31,22 @@ body { background: #eef1f6; color: var(--text); }
 /* ---- 结果视图 ---- */
 .res-wrap { max-width: 1000px; padding: 20px 18px 60px; }
 .res-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
-#view-results h1 { font-family: var(--serif); color: var(--navy); font-size: 26px; margin-bottom: 6px; }
-#view-results h2 { font-family: var(--serif); color: var(--navy); font-size: 20px; margin: 26px 0 10px; }
-#view-results p.lead { font-size: 14px; color: #44506a; line-height: 1.8; }
-#view-results code { background: #f2f5fa; padding: 1px 6px; border-radius: 4px; font-family: var(--mono); font-size: 13px; }
-#view-results .card { background: #fff; border-radius: 14px; padding: 18px 20px; box-shadow: 0 3px 18px rgba(13,43,92,.07); margin: 12px 0; }
-#view-results table { width: 100%; border-collapse: collapse; font-size: 14px; }
-#view-results th, #view-results td { padding: 8px 10px; border-bottom: 1px solid #e6eaf1; text-align: right; }
-#view-results th:first-child, #view-results td:first-child { text-align: left; }
-#view-results th { color: var(--muted); font-weight: 600; font-size: 13px; }
-#view-results .bar { height: 10px; border-radius: 6px; background: #e8edf5; overflow: hidden; }
-#view-results .bar i { display: block; height: 100%; background: var(--gold); }
-#view-results .note { background: none; border: none; border-radius: 0; padding: 0; margin: 8px 0; font-size: 12.5px; color: var(--muted); line-height: 1.7; }
-#view-results .pill { display: inline-block; background: #f2f5fa; border-radius: 20px; padding: 2px 10px; font-size: 12px; color: var(--navy); margin-right: 6px; }
-#view-results .warn { background: #fff6f4; border-left: 4px solid #c62828; padding: 10px 14px; border-radius: 8px; font-size: 14px; }
+#view-results h1, #view-analysis h1 { font-family: var(--serif); color: var(--navy); font-size: 26px; margin-bottom: 6px; }
+#view-results h2, #view-analysis h2 { font-family: var(--serif); color: var(--navy); font-size: 20px; margin: 26px 0 10px; }
+#view-results p.lead, #view-analysis p.lead { font-size: 14px; color: #44506a; line-height: 1.8; }
+#view-results code, #view-analysis code { background: #f2f5fa; padding: 1px 6px; border-radius: 4px; font-family: var(--mono); font-size: 13px; }
+#view-results .card, #view-analysis .card { background: #fff; border-radius: 14px; padding: 18px 20px; box-shadow: 0 3px 18px rgba(13,43,92,.07); margin: 12px 0; }
+#view-results table, #view-analysis table { width: 100%; border-collapse: collapse; font-size: 14px; }
+#view-results th, #view-results td, #view-analysis th, #view-analysis td { padding: 8px 10px; border-bottom: 1px solid #e6eaf1; text-align: right; }
+#view-results th:first-child, #view-results td:first-child,
+#view-analysis th:first-child, #view-analysis td:first-child { text-align: left; }
+#view-results th, #view-analysis th { color: var(--muted); font-weight: 600; font-size: 13px; }
+#view-results .bar, #view-analysis .bar { height: 10px; border-radius: 6px; background: #e8edf5; overflow: hidden; }
+#view-results .bar i, #view-analysis .bar i { display: block; height: 100%; background: var(--gold); }
+#view-results .note, #view-analysis .note { background: none; border: none; border-radius: 0; padding: 0; margin: 8px 0; font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+#view-results .pill, #view-analysis .pill { display: inline-block; background: #f2f5fa; border-radius: 20px; padding: 2px 10px; font-size: 12px; color: var(--navy); margin-right: 6px; }
+#view-results .warn, #view-analysis .warn { background: #fff6f4; border-left: 4px solid #c62828; padding: 10px 14px; border-radius: 8px; font-size: 14px; }
+#view-analysis td.note, #view-analysis th.note { text-align: left; }
 
 @media (max-width: 720px) {
   .topbar { flex-wrap: wrap; padding: 10px 14px; }
@@ -101,6 +103,10 @@ body { background: #eef1f6; color: var(--text); }
         <div class="consent thanks">
           <h2>实验结束</h2>
           <p>感谢你的参与！</p>
+          <div class="row" style="justify-content:center;margin-top:26px">
+            <button class="btn btn-gold" id="btn-analysis">查看数据分析</button>
+          </div>
+          <p class="muted" style="margin-top:10px">会把你这次的结果和全体被试放在一起看，需要联网。</p>
         </div>
       </section>
 
@@ -115,6 +121,20 @@ body { background: #eef1f6; color: var(--text); }
         <button type="button" class="btn btn-o btn-sm" id="btn-results-refresh">刷新数据</button>
       </div>
       {{RESULTS}}
+    </div>
+  </section>
+
+  <!-- ==================== 视图三：个人数据分析 ==================== -->
+  <section class="view" id="view-analysis">
+    <div class="wrap res-wrap">
+      <div class="res-bar">
+        <span class="muted">你的本次数据 + 全体被试对比（需联网）</span>
+        <div class="row">
+          <button type="button" class="btn btn-o btn-sm" id="btn-analysis-group">全班汇总</button>
+          <button type="button" class="btn btn-o btn-sm" id="btn-analysis-back">返回</button>
+        </div>
+      </div>
+      <div id="analysis-body"><p class="note">正在读取全体被试数据……</p></div>
     </div>
   </section>
 </main>

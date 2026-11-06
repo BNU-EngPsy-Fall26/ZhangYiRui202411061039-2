@@ -19,6 +19,44 @@ function shelfItems(c, rnd, x, y, w, h, n) { for (let i = 0; i < n; i++) { const
 function textLines(c, rnd, x, y, w, n, gap = 26, col = '#c9ced6') { for (let i = 0; i < n; i++) { c.fillStyle = col; c.fillRect(x, y + i * gap, w * (0.5 + rnd() * 0.5), 9); } }
 function icons(c, rnd, x, y, cols, rows, s, gap) { for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) { c.fillStyle = PAL[Math.floor(rnd() * PAL.length)]; rr(c, x + i * gap, y + j * gap, s, s, s * .22); c.fill(); } }
 
+// ======================= 实验一专用：广场（唯一场景） =======================
+// 设计要点：基础布局由种子决定 → 每次绘制完全一致；变化只有「多出来的那一个行人」，
+// 它的位置逐试次随机，因此所有试次的画面底色完全相同，只有变化位置在变，试次之间才可比。
+export function plazaLayout() {
+  const r = seededRandom('plaza-v2');
+  const bld = [];
+  for (let i = 0; i < 14; i++) bld.push({ h: 150 + r() * 200, col: PAL[Math.floor(r() * 10)] });
+  const people = [];
+  for (let i = 0; i < 26; i++) {
+    const y = 400 + r() * 470;
+    people.push({ x: 40 + r() * 1520, y, s: 20 + (y - 380) / 8, col: PAL[Math.floor(r() * 10)] });
+  }
+  return { bld, people };
+}
+
+// 行人的包围盒（脚在 y，头顶在 y - 1.77s，宽约 0.7s）——用于点击判定与位置避让
+export const personBox = (x, y, s) => [x - s * 0.35, y - s * 1.8, s * 0.7, s * 1.8];
+
+export function drawPlaza(c, extra) {
+  const { bld, people } = plazaLayout();
+  const g = c.createLinearGradient(0, 0, 0, 380);
+  g.addColorStop(0, '#85c1e9'); g.addColorStop(1, '#d6eaf8');
+  c.fillStyle = g; c.fillRect(0, 0, 1600, 380);
+  bld.forEach((b, i) => {
+    const x = i * 118;
+    c.fillStyle = b.col; c.globalAlpha = .55; c.fillRect(x, 380 - b.h, 110, b.h); c.globalAlpha = 1;
+    c.fillStyle = 'rgba(255,255,255,.5)';
+    for (let w = 0; w < 5; w++) c.fillRect(x + 12, 390 - b.h + w * 34, 86, 14);
+  });
+  c.fillStyle = '#c9c2b2'; c.fillRect(0, 380, 1600, 520);
+  c.strokeStyle = '#b3aa98';
+  for (let i = 0; i < 20; i++) { c.beginPath(); c.moveTo(800, 380); c.lineTo(i * 85 - 50, 900); c.stroke(); }
+  c.fillStyle = '#5d6d7e'; c.beginPath(); c.ellipse(800, 640, 220, 70, 0, 0, 7); c.fill();
+  c.fillStyle = '#85c1e9'; c.beginPath(); c.ellipse(800, 630, 190, 55, 0, 0, 7); c.fill();
+  people.forEach((p) => person(c, p.x, p.y, p.s, p.col));
+  if (extra) person(c, extra.x, extra.y, extra.s, extra.col || '#c0392b');
+}
+
 export const CB2 = {
   // ===== 简单（中心兴趣、较大、颜色/出现消失） =====
   intersection(c, ch) { // 十字路口：中央红车变蓝

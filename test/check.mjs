@@ -14,19 +14,18 @@ const angDiff = (a, b) => { let d = ((a - b) % 360 + 540) % 360 - 180; return d;
 
 /* ---------- 实验一 ---------- */
 const cb = CB.buildTrials();
-ok(cb.length === 12, '实验一试次数 = 12', `got ${cb.length}`);
-const valid = cb.filter((t) => t.cue_valid === 1).length;
-ok(valid === 9, '箭头有效试次 = 9（75%）', `got ${valid}`);
-const scenesUsed = new Set(cb.map((t) => t.scene.id));
-ok(scenesUsed.size === 6, '使用 6 个场景', `got ${scenesUsed.size}`);
-const repCount = {};
-cb.forEach((t) => { repCount[t.scene.id] = (repCount[t.scene.id] || 0) + 1; });
-ok(Object.values(repCount).every((n) => n === 2), '每个场景出现 2 次', JSON.stringify(repCount));
+ok(cb.length === 36, '实验一试次数 = 36', `got ${cb.length}`);
+const cnt = { 0: 0, 1: 0, 2: 0 };
+cb.forEach((t) => { cnt[t.cue_type]++; });
+ok(cnt[0] === 12 && cnt[1] === 12 && cnt[2] === 12, '三线索条件各 12 试次', JSON.stringify(cnt));
+ok(cb.every((t) => t.extra && Number.isFinite(t.extra.x)), '每个试次都有变化点坐标');
+ok(cb.every((t) => t.bbox[0] < t.extra.x && t.extra.x < t.bbox[0] + t.bbox[2]), '判定框包住变化点');
 
-const sameDir = cb.filter((t) => t.cue_valid === 1).every((t) => Math.abs(angDiff(t.cue_angle, t.true_angle)) < 1e-6);
+const sameDir = cb.filter((t) => t.cue_type === 1).every((t) => Math.abs(angDiff(t.cue_angle, t.true_angle)) < 1e-6);
 ok(sameDir, '有效线索与真实变化方向一致');
-const oppDir = cb.filter((t) => t.cue_valid === 0).every((t) => Math.abs(Math.abs(angDiff(t.cue_angle, t.true_angle)) - 180) < 1e-6);
+const oppDir = cb.filter((t) => t.cue_type === 2).every((t) => Math.abs(Math.abs(angDiff(t.cue_angle, t.true_angle)) - 180) < 1e-6);
 ok(oppDir, '无效线索指向相反方向');
+ok(cb.filter((t) => t.cue_type === 0).every((t) => t.cue_valid === ''), '无箭头试次不记 cue_valid');
 
 /* ---------- 实验二 ---------- */
 const yah = YAH.buildTrials();
