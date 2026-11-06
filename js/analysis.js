@@ -174,12 +174,16 @@ export async function main(ctx = {}) {
     loadAll(PROJECTS.yah, 'yah_heading_cue').catch(fail),
   ]);
   // 「全体」不含自己，避免自己和自己比
-  const othersCB = recsCB.filter((r) => r.participant !== sid);
+  // 实验一：只保留新设计（有 cue_type 字段 = 三水平 36 试次）的记录。
+  // 老的 12 试次两水平数据（cue_valid 只有 1/0、无基线）混进来会让「每条件 ≥10」和「无箭头基线」都失真。
+  const isNewCB = (r) => (r.trials || []).some((t) => t.cue_type != null && t.cue_type !== '');
+  const legacyCB = recsCB.filter((r) => !isNewCB(r) && r.participant !== sid).length;
+  const othersCB = recsCB.filter((r) => isNewCB(r) && r.participant !== sid);
   const othersYAH = recsYAH.filter((r) => r.participant !== sid);
 
   const html = [];
   try {
-    html.push(header(ctx, recsCB, recsYAH, othersCB, othersYAH, err));
+    html.push(header(ctx, recsCB, recsYAH, othersCB, othersYAH, err, legacyCB));
     html.push(sectionCB(cb, othersCB));
     html.push(sectionYAH(yah, othersYAH));
     html.push(sectionWrap());
@@ -191,16 +195,18 @@ export async function main(ctx = {}) {
   }
 }
 
-function header(ctx, recsCB, recsYAH, othersCB, othersYAH, err) {
+function header(ctx, recsCB, recsYAH, othersCB, othersYAH, err, legacyCB = 0) {
   const pills = `<span class="pill">实验一 全体 ${recsCB.length} 份</span>
     <span class="pill">实验二 全体 ${recsYAH.length} 份</span>
     ${ctx.cb ? '<span class="pill">含你本次的实验一</span>' : ''}
     ${ctx.yah ? '<span class="pill">含你本次的实验二</span>' : ''}`;
   const warn = err ? `<div class="warn">读不到全体数据（${err.message}）。下面的「我」仍然有效，但无法与全体对比 —— 通常是没有联网，或页面以 file:// 打开被跨域拦截。</div>` : '';
+  const legacy = legacyCB ? `<p class="note">实验一有 <b>${legacyCB}</b> 份旧设计记录（12 试次、只有「指对/指反」两水平）已排除在「全体」之外：
+    它们每个条件只有 3 个无效试次、也没有无箭头基线，与新设计的 36 试次（三条件各 12）不可比。旧数据仍保留在服务器上，可在全班汇总页看到。</p>` : '';
   return `<h1>数据分析</h1>
     <p class="lead">下面按作业要求给出三件事：<b>效应量计算</b>、<b>与原文对比</b>、<b>改进条件检验</b>；最后把你自己放进全体被试里看位置。
-    效应量：独立样本用 Cohen's <i>d</i>，被试内用 Cohen's <i>dz</i>；p 值为双尾。${stars(0.04)}记号：* p&lt;.05，** p&lt;.01，*** p&lt;.001，n.s. 不显著。</p>
-    <div style="margin:10px 0 4px">${pills}</div>${warn}`;
+    效应量：独立样本用 Cohen's <i>d</i>，被试内用 Cohen's <i>dz</i>；p 值为双尾。记号：* p&lt;.05，** p&lt;.01，*** p&lt;.001，n.s. 不显著。</p>
+    <div style="margin:10px 0 4px">${pills}</div>${warn}${legacy}`;
 }
 
 /* ======================= 实验一 ======================= */

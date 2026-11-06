@@ -30,7 +30,10 @@ function makeYAH(seed) {
 }
 
 const server = {
-  'CA7JK4': [1, 2, 3].map((k) => ({ participant: 'P0' + k, trials: makeCB(k * 7) })),
+  // 混入一条「旧设计」记录（12 试次、只有 cue_valid，没有 cue_type），验证会被排除
+  'CA7JK4': [1, 2, 3].map((k) => ({ participant: 'P0' + k, trials: makeCB(k * 7) }))
+    .concat([{ participant: 'OLD1', trials: Array.from({ length: 12 }, (_, i) => ({
+      i: i + 1, scene: 'plaza', cue_valid: i < 9 ? 1 : 0, resp_ms: 1100 + i * 10, click_ok: 1 })) }]),
   '3AQE6F': [1, 2, 3].map((k) => ({ participant: 'P0' + k, trials: makeYAH(k * 11) })),
 };
 globalThis.fetch = async (url) => {
@@ -61,6 +64,8 @@ ok(/改进条件检验/.test(html), '包含改进条件检验');
 ok(/你 vs 全体/.test(html), '包含「我 vs 全体」对比');
 ok(/全体被试/.test(html), '包含全体被试表');
 ok(/<t[dh]/.test(html), '生成了表格');
+ok(/旧设计记录/.test(html), '旧设计（12 试次）记录被排除并提示');
+ok(!/OLD1/.test(html), '旧记录没有被计入全体表');
 // 我自己 36 试次 → 三个条件各 12
 ok(/无箭头（基线）<\/td><td>12<\/td>/.test(html), '我的实验一每条件 12 试次');
 
