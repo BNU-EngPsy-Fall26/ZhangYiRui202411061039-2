@@ -14,6 +14,8 @@
 - 在线：部署到 GitHub Pages（见下），用 `https://<用户名>.github.io/AttentionExperiment/` 打开；
 - 本地：在项目目录跑任意静态服务器，例如 `python -m http.server 8765`，再打开 `http://127.0.0.1:8765/index.html`。
 
+页面打开时会先读后端，把已有编号的最大值 +1 预填进「被试编号」（现在有 P01–P05，所以默认填 **P06**），跑实验的人直接点「进入实验」就行。只认 `P` + 数字这种格式，`test004`、`anonymous` 之类会被忽略，不会把编号带跑偏；读不到后端（离线）就保持空白，不硬塞。
+
 被试流程：填被试编号 →（可选）开启摄像头眼动并做 9 点校准 → 实验一 → 实验二 → 「实验结束，感谢参与」→（可选）「查看分析报告」。
 
 结束后有三个查看结果的地方，都需要联网读服务器数据，也可以不跑实验直接打开：
@@ -163,7 +165,7 @@ hw2-lab/
 ├── js/report.js          图表报告页：六张 SVG 图 + 结论摘要（index.html#/report）
 ├── js/lib/stats.js       统计：均值/SD/中位数/分位数 + Welch t + 配对 t + Cohen d/dz
 ├── js/lib/chart.js       零依赖 SVG 图表：柱状 / 分组柱状 / 散点条 / 效应量条 / 百分位条
-├── js/lib/upload.js      上传 / 读取 / CSV 备份 / gazeSummary
+├── js/lib/upload.js      上传 / 读取 / CSV 备份 / gazeSummary / nextParticipant（编号推算）
 ├── vendor/webgazer/      WebGazer.js + MediaPipe FaceMesh（自托管，约 18 MB）
 ├── docs/                 眼动集成的可行性分析
 └── test/                 自检脚本与眼动环境自检页
@@ -177,6 +179,7 @@ node test/check.mjs     # 设计校验：试次平衡 / 线索配额 / 系统性
 node test/trials.mjs    # 实验一试次生成：36 试次 / 三条件各 12 / 位置分散且不重叠
 node test/analysis.mjs  # 分析页渲染冒烟：假 DOM + 假服务器，检查无 NaN/undefined
 node test/report.mjs    # 报告页渲染：六张图齐全 / 去重 / 清洗口径 / p 值格式
+node test/seed.mjs      # 被试编号推算：只认 P+数字，P05 → P06，忽略 test004 等
 node test/static.mjs    # 构建产物静态检查：脚本可解析、关键符号在、模型文件齐全
 node test/smoke.mjs     # 需要能跑无头 Chrome/Edge：25 项结构与模块断言 + 5 项流程断言
 # 浏览器打开（需 https 或 localhost）：

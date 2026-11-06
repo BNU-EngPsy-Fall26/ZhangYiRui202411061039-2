@@ -54,6 +54,44 @@ export async function loadAll(project, experiment) {
   return r.records || []; // [{ participant, condition, trials: [...] }, ...]
 }
 
+/* ---------------- 被试编号推算 ---------------- */
+// 只认 P + 数字（P01 / P02 / p7 都算，统一成大写 P + 至少两位）；
+// 早期测试留下的 test004、anonymous、空值等一律忽略，免得把编号带跑偏
+const SID_RE = /^P(\d{1,4})$/i;
+
+export function nextParticipant(records) {
+  let max = 0;
+  for (const r of records || []) {
+    const m = SID_RE.exec(String((r && r.participant) || '').trim());
+    if (m) max = Math.max(max, +m[1]);
+  }
+  return 'P' + String(max + 1).padStart(2, '0');
+}
+
+// 把两个实验的记录合起来算下一个编号；两个都读失败时返回 null（前端保持空白，不硬塞）
+export async function suggestParticipant() {
+  const res = await Promise.allSettled([
+    loadAll(PROJECTS.cb, 'changeblind_cue_arrow'),
+    loadAll(PROJECTS.yah, 'yah_heading_cue'),
+  ]);
+  const recs = [];
+  const seen = new Set();
+  let ok = false;
+  for (const r of res) {
+    if (r.status !== 'fulfilled') continue;
+    ok = true;
+    for (const rec of r.value || []) {
+      const p = String((rec && rec.participant) || '').trim();
+      const key = p.toUpperCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      recs.push(rec);
+    }
+  }
+  if (!ok) return null;
+  return { sid: nextParticipant(recs), n: recs.length };
+}
+
 // 把试次数组转成 CSV（并触发下载），作为上传失败时的兜底
 export function downloadCSV(filename, rows) {
   if (!rows || !rows.length) return;

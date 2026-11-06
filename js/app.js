@@ -2,7 +2,7 @@
 import { toast } from './api.js';
 import { Stage } from './stage.js';
 import { ask } from './lib/instruct.js';
-import { submitData, downloadCSV, PROJECTS } from './lib/upload.js';
+import { submitData, downloadCSV, PROJECTS, suggestParticipant } from './lib/upload.js';
 import { GazeHub } from './gaze/gaze_hub.js';
 import { runCalibration, ERR_LIMIT_PX } from './gaze/calibration.js';
 import * as CB from './exp/cb_cued.js';
@@ -59,6 +59,17 @@ $('btn-login').onclick = () => {
   show('screen-consent');
 };
 $('in-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-login').click(); });
+
+/* 打开页面时按后端已有编号预填下一个（P05 → P06）；读不到就保持空白，不硬塞 */
+(async () => {
+  const inp = $('in-sid'), hint = $('sid-hint');
+  if (!inp) return;
+  let s = null;
+  try { s = await suggestParticipant(); } catch (e) { s = null; }
+  if (!s) return;
+  if (!inp.value.trim()) inp.value = s.sid;          // 用户已经动手填了就不覆盖
+  if (hint) hint.textContent = `已按后端 ${s.n} 名被试预填 ${s.sid}，可手动改。`;
+})();
 
 /* ---------------- 摄像头眼动（可选，失败不阻塞流程） ---------------- */
 $('btn-nocam').onclick = () => { GazeHub.mode = null; startAll(); };

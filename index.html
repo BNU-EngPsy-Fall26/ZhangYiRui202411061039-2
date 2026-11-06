@@ -414,6 +414,7 @@ body { background: #eef1f6; color: var(--text); }
         <div class="login-box">
           <h2>被试信息</h2>
           <div class="field"><label>被试编号</label><input id="in-sid" autocomplete="off" placeholder="例如 P01"></div>
+          <p class="muted" id="sid-hint" style="margin:-2px 0 10px;font-size:12.5px"></p>
           <div class="field"><label>姓名</label><input id="in-name" autocomplete="off" placeholder="仅本地记录"></div>
           <div class="err" id="login-err"></div>
           <div class="row" style="margin-top:6px">
@@ -1006,6 +1007,44 @@ async function loadAll(project, experiment) {
   return r.records || []; // [{ participant, condition, trials: [...] }, ...]
 }
 
+/* ---------------- 被试编号推算 ---------------- */
+// 只认 P + 数字（P01 / P02 / p7 都算，统一成大写 P + 至少两位）；
+// 早期测试留下的 test004、anonymous、空值等一律忽略，免得把编号带跑偏
+const SID_RE = /^P(\d{1,4})$/i;
+
+function nextParticipant(records) {
+  let max = 0;
+  for (const r of records || []) {
+    const m = SID_RE.exec(String((r && r.participant) || '').trim());
+    if (m) max = Math.max(max, +m[1]);
+  }
+  return 'P' + String(max + 1).padStart(2, '0');
+}
+
+// 把两个实验的记录合起来算下一个编号；两个都读失败时返回 null（前端保持空白，不硬塞）
+async function suggestParticipant() {
+  const res = await Promise.allSettled([
+    loadAll(PROJECTS.cb, 'changeblind_cue_arrow'),
+    loadAll(PROJECTS.yah, 'yah_heading_cue'),
+  ]);
+  const recs = [];
+  const seen = new Set();
+  let ok = false;
+  for (const r of res) {
+    if (r.status !== 'fulfilled') continue;
+    ok = true;
+    for (const rec of r.value || []) {
+      const p = String((rec && rec.participant) || '').trim();
+      const key = p.toUpperCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      recs.push(rec);
+    }
+  }
+  if (!ok) return null;
+  return { sid: nextParticipant(recs), n: recs.length };
+}
+
 // 把试次数组转成 CSV（并触发下载），作为上传失败时的兜底
 function downloadCSV(filename, rows) {
   if (!rows || !rows.length) return;
@@ -1043,7 +1082,7 @@ function gazeSummary(rec) {
   };
 }
 
-return { LAB, PROJECTS, sanitizeTrials, submitData, loadAll, downloadCSV, gazeSummary };
+return { LAB, PROJECTS, sanitizeTrials, submitData, loadAll, nextParticipant, suggestParticipant, downloadCSV, gazeSummary };
 })();
 
 /* ===== js/lib/stats.js ===== */
@@ -3520,7 +3559,7 @@ const APP = (function () {
 const { toast } = API;
 const { Stage } = STAGE;
 const { ask } = INSTRUCT;
-const { submitData, downloadCSV, PROJECTS } = UPLOAD;
+const { submitData, downloadCSV, PROJECTS, suggestParticipant } = UPLOAD;
 const { GazeHub } = GAZE;
 const { runCalibration, ERR_LIMIT_PX } = CALIB;
 const CB = CBCUED;
@@ -3589,6 +3628,17 @@ $('btn-login').onclick = () => {
   show('screen-consent');
 };
 $('in-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('btn-login').click(); });
+
+/* 打开页面时按后端已有编号预填下一个（P05 → P06）；读不到就保持空白，不硬塞 */
+(async () => {
+  const inp = $('in-sid'), hint = $('sid-hint');
+  if (!inp) return;
+  let s = null;
+  try { s = await suggestParticipant(); } catch (e) { s = null; }
+  if (!s) return;
+  if (!inp.value.trim()) inp.value = s.sid;          // 用户已经动手填了就不覆盖
+  if (hint) hint.textContent = `已按后端 ${s.n} 名被试预填 ${s.sid}，可手动改。`;
+})();
 
 /* ---------------- 摄像头眼动（可选，失败不阻塞流程） ---------------- */
 $('btn-nocam').onclick = () => { GazeHub.mode = null; startAll(); };
