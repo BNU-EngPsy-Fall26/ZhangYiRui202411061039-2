@@ -1,5 +1,7 @@
 # 注意与空间认知实验（作业二）
 
+项目已部署到 GitHub Pages：https://zyr-bnu.github.io/AttentionExperiment/
+
 基于课堂 Attention Lab 的两个实验重写并改进。**所有界面、绘制与流程代码为本项目自行实现**，只沿用课堂范式的实验逻辑与参数（闪烁 240 ms、YAH 的 9 s 时限等）。
 
 - 实验一：闪烁找不同（Rensink, O'Regan & Clark, 1997）+ **方向箭头线索（无箭头 / 指向正确 / 指向相反，三水平）**
