@@ -222,9 +222,8 @@ export function mountGazeTraj(el, records, opts = {}) {
         + `　平均注视点距变化中心 ${fmt(st.meanDist)} px`;
     } else {
       infoEl.innerHTML = hasGaze(trial)
-        ? `这一题<b>没有原始轨迹</b>（旧版本只上传了整题的算术平均）。图中青色十字 = 平均注视点，`
-          + `距变化中心 <b>${fmt(trial.gaze_x !== '' && bbox ? Math.hypot(+trial.gaze_x * SW - (bbox[0] + bbox[2] / 2), +trial.gaze_y * SH - (bbox[1] + bbox[3] / 2)) : null)}</b> px；`
-          + `丢脸率 ${pct(+trial.gaze_lost)}，有效采样 ${trial.gaze_n} 个。`
+        ? `平均注视点距变化中心 <b>${fmt(trial.gaze_x !== '' && bbox ? Math.hypot(+trial.gaze_x * SW - (bbox[0] + bbox[2] / 2), +trial.gaze_y * SH - (bbox[1] + bbox[3] / 2)) : null)}</b> px`
+          + `　丢脸率 ${pct(+trial.gaze_lost)}　有效采样 ${trial.gaze_n} 个`
         : '这一题没有眼动记录（被试未开启摄像头，或该题眼动全部丢失）。图中只有变化区域与点击位置。';
     }
     timeEl.textContent = hasPath(trial) && dur ? `${(Math.min(tShow, dur) / 1000).toFixed(1)} / ${(dur / 1000).toFixed(1)} s` : '';
@@ -234,15 +233,9 @@ export function mountGazeTraj(el, records, opts = {}) {
 
   function updateSum() {
     const s = recordGazeSummary(rec);
-    const noPath = s.withGaze - s.withPath;
     sumEl.innerHTML = `<b>${rec.participant}</b>：${s.n} 个试次，${s.withGaze} 个有眼动数据，其中 <b>${s.withPath}</b> 个带原始轨迹。`
       + (s.withPath
         ? `　有轨迹的试次里，注视点进过变化区的 <b>${s.hitSee + s.hitMiss}</b> 个 —— 报告了变化的 ${s.hitSee} 个（看了才看见），没报告的 ${s.hitMiss} 个（看了却没看见）。`
-        : '')
-      + (noPath
-        ? (s.withPath
-          ? `　另有 ${noPath} 个试次只有平均注视点（旧版本上传，画不出路径）。`
-          : `　这 ${noPath} 个试次都只有平均注视点，没有采样序列 —— 旧版本上传时只存了整题的算术平均，所以画不出扫描路径。`)
         : '');
   }
 
@@ -270,13 +263,14 @@ export function mountGazeTraj(el, records, opts = {}) {
   selRec.onchange = () => { rec = recs[+selRec.value] || recs[0]; fillTrials(); updateSum(); };
   selTrial.onchange = pickTrial;
 
-  // 页面级说明：现有数据到底能不能画轨迹
+  // 页面级说明：有轨迹时说明全班覆盖情况；没有则不占位
   const hint = $sel(el, '.gv-hint');
   if (hint) {
-    hint.innerHTML = totalPath
-      ? `全班 ${recs.length} 份带眼动的记录、${totalTrials} 个试次中有 <b>${totalPath}</b> 个带原始轨迹（gaze_path 字段）。`
-      : `现有 ${recs.length} 份记录、${totalTrials} 个试次都是<b>旧版本上传</b>：只存了整题的算术平均注视点，没有采样序列，`
-        + `所以画不出扫描路径。要拿到轨迹，需要在<b>最新版页面</b>上重跑一次实验一（约 5–6 分钟，需开摄像头并完成 9 点校准）。`;
+    if (totalPath) {
+      hint.innerHTML = `全班 ${recs.length} 份带眼动的记录、${totalTrials} 个试次中有 <b>${totalPath}</b> 个带原始轨迹（gaze_path 字段）。`;
+    } else {
+      hint.style.display = 'none';
+    }
   }
 
   fillTrials();
