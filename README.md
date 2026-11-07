@@ -102,6 +102,23 @@ face_mesh_solution_simd_wasm_bin.wasm          6161697 B
 3. **打开摄像头** —— 出现画面即权限正常；
 4. **加载 WebGazer** —— 打印出 webgazer 对象即脚本可用。
 
+### 眼动轨迹（结果页）
+
+结果页新增「实验一 · 眼动轨迹（扫描路径 / 注视点 / 热图）」一栏（`index.html#/results` 与 `results.html` 都有），
+做法对照原项目 `js/gaze_viz.js`：底图 → 扫描路径折线 → I-DT 注视点（圆大小∝注视时长、编号为顺序、落在变化区里的标红）
+→ 热图 → 时间轴回放。
+
+| 关键点 | 说明 |
+|---|---|
+| 底图复原 | 实验一只有一个场景，画面唯一差异是「多出来的那个人」，其脚点 `ex/ey` 逐试次已记录 → 用 `drawPlaza(ctx, {x,y,s})` + `contrast(0.7)` 逐像素还原当时的刺激，不需要另存截图 |
+| 轨迹来源 | `gaze_path` 字段：每点 3 个字符（18 bit = x/y 各 512 级，约 3 px），时间不存、按 i×step×66 ms 还原。30 s ≈ 1350 字，服务端上限 2000 |
+| 为什么压成字符串 | `/api/hw2/submit` 只收平铺标量，对象数组会被服务端转换并回 warning |
+| 降级 | 旧记录没有 `gaze_path` → 只画「平均注视点（青色十字）+ 点击位置 + 变化框」，并注明画不出路径 |
+| 独立预览 | `test/gazeviz.html`：读真实数据；若全班都还没有轨迹，会给若干试次合成演示轨迹（仅内存，不上传），用于检查渲染 |
+
+统计口径：I-DT 离散度 ≤120 px、持续 ≥100 ms（与原项目一致）；「首个进入变化区的注视」= 第一个落在
+`personBox ±30 px` 内的注视点起始时刻；「变化区内注视占比」= 框内注视时长 / 总注视时长。
+
 ## 实验一设计
 
 | 项目 | 内容 |
@@ -113,7 +130,7 @@ face_mesh_solution_simd_wasm_bin.wasm          6161697 B
 | 试次 | 3 线索条件 × 12 = **36**，条件配额固定、顺序随机 | 
 | **改进** | 闪烁前 900 ms 出现指向变化方位的金色箭头，三水平：**无箭头（基线）/ 指向正确 / 指向相反**，各 12 试次。无箭头试次同样呈现 900 ms 注视屏，只显示中央注视点，保证各条件时序一致 |
 | 反应 | 觉察后按空格报时，再用鼠标点击多出来的那个人（判定框 = 行人包围盒 ±32 px） |
-| 数据 | `cue_type`(0/1/2)、`cue_valid`、`cue_deg`、`ex/ey/ecc`（变化点坐标与离中心距离）、`resp_ms`、`timeout`、`click_ok`、`click_x/y`；启用眼动时另有 `gaze_n / gaze_x / gaze_y / gaze_lost / gaze_qc` |
+| 数据 | `cue_type`(0/1/2)、`cue_valid`、`cue_deg`、`ex/ey/ecc`（变化点坐标与离中心距离）、`resp_ms`、`timeout`、`click_ok`、`click_x/y`；启用眼动时另有 `gaze_n / gaze_x / gaze_y / gaze_lost / gaze_qc` 与 `gaze_path / gaze_step`（原始轨迹，见上） |
 | 项目码 | `CA7JK4`（experiment = `changeblind_cue_arrow`） |
 
 > **为什么从 6 场景改成 1 场景**：原设计 6 个场景 × 2 轮 = 12 试次，每个场景只有 2 次，
@@ -167,10 +184,12 @@ hw2-lab/
 ├── js/exp/scenes.js      场景绘制（课堂程序的绘图函数）
 ├── js/exp/w6_common.js   焦点守卫、HUD、按键等待等共用工具
 ├── js/results.js         全班汇总页逻辑
+├── js/gazeviz.js         结果页眼动轨迹视图（底板复原 + 路径 + 注视点 + 热图 + 回放）
 ├── js/analysis.js        数值明细页：效应量 / 原文对比 / 改进条件检验 / 我 vs 全体
 ├── js/report.js          图表报告页：六张 SVG 图 + 结论摘要（index.html#/report）
 ├── js/lib/stats.js       统计：均值/SD/中位数/分位数 + Welch t + 配对 t + Cohen d/dz
 ├── js/lib/chart.js       零依赖 SVG 图表：柱状 / 分组柱状 / 散点条 / 效应量条 / 百分位条
+├── js/lib/gazepath.js    轨迹编码（3 字符/点）+ 解码 + I-DT 注视点 + 轨迹统计
 ├── js/lib/upload.js      上传 / 读取 / CSV 备份 / gazeSummary / nextParticipant（编号推算）
 ├── js/lib/pause.js       实验内暂停 / 退出（中断当前试次、继续后重做）
 ├── vendor/webgazer/      WebGazer.js + MediaPipe FaceMesh（自托管，约 18 MB）
@@ -188,6 +207,7 @@ node test/analysis.mjs  # 分析页渲染冒烟：假 DOM + 假服务器，检�
 node test/report.mjs    # 报告页渲染：六张图齐全 / 去重 / 清洗口径 / p 值格式
 node test/seed.mjs      # 被试编号推算：只认 P+数字，P05 → P06，忽略 test004 等
 node test/pause.mjs     # 暂停模块：中断信号只发一次、继续后重新布防、退出时点掉说明卡
+node test/gazepath.mjs  # 眼动轨迹：编解码往返 / 丢失点 / 抽稀 / I-DT 注视点 / 命中统计 / 上传字段
 node test/static.mjs    # 构建产物静态检查：脚本可解析、关键符号在、模型文件齐全
 node test/smoke.mjs     # 需要能跑无头 Chrome/Edge：25 项结构与模块断言 + 5 项流程断言
 # 浏览器打开（需 https 或 localhost）：
@@ -195,6 +215,7 @@ node test/smoke.mjs     # 需要能跑无头 Chrome/Edge：25 项结构与模块
 #   /test/harness.html?mode=draw   渲染关键画面（CB 场景、YAH 有无提示对照）
 #   /test/harness.html?mode=flow   自动作答跑完实验一，检查 12 条记录字段
 #   /test/harness.html?mode=yah    自动作答跑完实验二，检查 48 条记录与 6 格平衡
+#   /test/gazeviz.html             结果页眼动轨迹视图预览（无真实轨迹时用合成轨迹演示）
 ```
 
 `test/check_report.txt` 与 `test/shot_*.png` 是自检输出，可保留作为开发证据。`package.json` 只为让 Node 以 ESM 解析测试脚本，不影响静态部署。
@@ -207,6 +228,10 @@ node test/smoke.mjs     # 需要能跑无头 Chrome/Edge：25 项结构与模块
 - 每名被试只有 3 个「箭头指反」试次，单被试层面检验力有限，结论应以全班合并为准。
 - 眼动是**可选层**：`file://` 下无法启用（安全上下文 + 本地 wasm 双限制），要用就走 https / localhost；不启用则只记录按键、点击与反应时。
 - 眼动精度约 3–5°（120–200 px），只用于粗粒度分析与质量控制，**不能**作为判定"是否看到变化"的依据。
+- **轨迹只对新记录可得**：`gaze_path` 是本版新加的字段，之前上传的记录（2026-11-06 及更早）只有整题的平均注视点，
+  结果页会自动降级、不会报错，但画不出扫描路径。补数据只能重跑实验一（每人 5–6 分钟）。
+- 轨迹精度受同一个 3–5° 误差限制：位置误差 120–200 px，因此「注视点是否进入变化框 ±30 px」只能当作宽松线索，
+  不能据此断定"看到了/没看到"。
 - 实验二不记录眼动（48 试次 × 9 s 的注视数据对本作业的方位判断问题贡献有限，且会显著拉长单次时长）。
 
 ## 数据上传

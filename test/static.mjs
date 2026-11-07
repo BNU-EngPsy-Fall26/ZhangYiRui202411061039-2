@@ -1,9 +1,12 @@
 // 静态自检：解析构建产物里的内联脚本（语法层）+ 检查关键符号与资源是否都在
 import fs from 'node:fs';
 import vm from 'node:vm';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const dir = 'D:/项目/EngineeringPsychology/AttentionExperiment/AttentionExperiment/hw2-lab';
-const html = fs.readFileSync(dir + '/index.html', 'utf8');
+// 仓库根目录 = 本文件所在目录的上一级（原先写死绝对路径，工作区一挪位置就报错）
+const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const html = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
 const out = [];
 const ok = (c, msg) => out.push((c ? 'PASS ' : 'FAIL ') + msg);
 
@@ -55,6 +58,15 @@ for (const [needle, label] of [
   ["font-family='", 'SVG font-family 加引号'],
   ['Cohen', "Cohen's d label"],
   ['Rensink', 'original-paper reference'],
+  ['const GAZEPATH = (function', 'GAZEPATH module'],
+  ['const GAZEMAP = (function', 'GAZEMAP module'],
+  ['function mountGazeTraj', 'mountGazeTraj'],
+  ['function encodePath', 'encodePath'],
+  ['function decodePath', 'decodePath'],
+  ['function pathStats', 'pathStats'],
+  ['gaze_path', 'gaze_path 字段'],
+  ['gv-canvas', 'gaze trajectory canvas'],
+  ['cb-gaze-box', 'gaze trajectory container'],
   ['no consent', 'x'],
 ]) {
   if (label === 'x') continue;
@@ -90,6 +102,44 @@ for (const [f, min] of [
   const p = dir + '/' + f;
   const sz = fs.existsSync(p) ? fs.statSync(p).size : -1;
   ok(sz >= min, 'asset ' + f.split('/').pop() + ' ' + (sz < 0 ? 'MISSING' : (sz / 1048576).toFixed(2) + 'MB'));
+}
+
+// 打包器只认 `export const NAME`（单个名字）。写成 `export const A = 1, B = 2;` 时只会导出 A，
+// B 在单文件版里变成 undefined —— canvas 尺寸这类 bug 会以「image argument is a canvas element
+// with a width or height of 0」的形式出现。这里在源码层面直接拦住这种写法。
+{
+  const files = [];
+  const walk = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith('.js')) files.push(p);
+    }
+  };
+  walk(path.join(dir, 'js'));
+  // 只看「顶层逗号」：字符串、括号里的逗号不算（api.js 的 esc 里有对象字面量的逗号）
+  const multiDecl = (line) => {
+    const m = /^export\s+(const|let|var)\s+/.exec(line);
+    if (!m) return false;
+    let depth = 0, inStr = null;
+    for (let i = m[0].length; i < line.length; i++) {
+      const c = line[i];
+      if (inStr) { if (c === '\\') i++; else if (c === inStr) inStr = null; continue; }
+      if (c === '"' || c === "'" || c === '`') { inStr = c; continue; }
+      if ('([{'.includes(c)) depth++;
+      else if (')]}'.includes(c)) depth--;
+      else if (c === ';' && depth === 0) return false;
+      else if (c === ',' && depth === 0) return /^\s*[A-Za-z_$][\w$]*\s*=/.test(line.slice(i + 1));
+    }
+    return false;
+  };
+  const bad = [];
+  for (const f of files) {
+    fs.readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
+      if (multiDecl(line)) bad.push(path.relative(dir, f) + ':' + (i + 1));
+    });
+  }
+  ok(!bad.length, '没有「一个 export 声明多个常量」的写法' + (bad.length ? '：' + bad.join('，') : ''));
 }
 
 const fail = out.filter((s) => s.startsWith('FAIL')).length;

@@ -19,6 +19,7 @@ const MODS = [
   ['js/gaze/gaze_hub.js', 'GAZE'],
   ['js/gaze/calibration.js', 'CALIB'],
   ['js/lib/instruct.js', 'INSTRUCT'],
+  ['js/lib/gazepath.js', 'GAZEPATH'],
   ['js/lib/upload.js', 'UPLOAD'],
   ['js/lib/stats.js', 'STATS'],
   ['js/lib/chart.js', 'CHART'],
@@ -28,6 +29,7 @@ const MODS = [
   ['js/exp/w6_common.js', 'W6'],
   ['js/exp/cb_cued.js', 'CBCUED'],
   ['js/exp/yah_cued.js', 'YAHCUED'],
+  ['js/gazeviz.js', 'GAZEMAP'],
   ['js/results.js', 'RESULTS'],
   ['js/analysis.js', 'ANALYSIS'],
   ['js/report.js', 'REPORT'],
@@ -89,7 +91,7 @@ const code = [
   "'use strict';",
   ...MODS.map(([f]) => bundleModule(f)),
   '// 调试口：便于在控制台复用模块、也供自动自检使用',
-  'window.__hw2 = { API, STAGE, GAZE, CALIB, INSTRUCT, UPLOAD, STATS, CHART, PAUSE, SCENES, CB2MOD, CBCUED, YAHCUED, W6, RESULTS, ANALYSIS, REPORT };',
+  'window.__hw2 = { API, STAGE, GAZE, CALIB, INSTRUCT, GAZEPATH, UPLOAD, STATS, CHART, PAUSE, SCENES, CB2MOD, CBCUED, YAHCUED, W6, GAZEMAP, RESULTS, ANALYSIS, REPORT };',
   '})();',
 ].join('\n\n').replace(/<\/script/gi, '<\\/script');
 

@@ -3,7 +3,8 @@
 import { GazeHub } from './gaze_hub.js';
 import { sleep } from '../api.js';
 
-export const VIEW_CM = 60, CM_PER_PX = 2.54 / 96;
+export const VIEW_CM = 60;
+export const CM_PER_PX = 2.54 / 96;
 export const pxToDeg = (px) => Math.atan((px * CM_PER_PX) / VIEW_CM) * 180 / Math.PI;
 export const ERR_LIMIT_PX = 200;
 

@@ -1,6 +1,8 @@
 // 数据上传 / 读取 / CSV 备份
 // 说明：/api/hw2/submit 只接受「平铺」字段值（数字、短字符串、布尔、数字数组），
 // 因此每个试次都在本地压平成一行标量。
+import { encodePath } from './gazepath.js';
+
 export const LAB = 'https://attention-lab-production.up.railway.app';
 export const PROJECTS = {
   cb: 'CA7JK4',   // 实验一：找不同 + 方向箭头
@@ -8,17 +10,21 @@ export const PROJECTS = {
 };
 
 // 服务器只接受「平铺」标量值，这里把 null/undefined/对象统一压平，避免被截断或报格式错误
+// 字符串默认截到 500 字；gaze_path 是眼动轨迹的紧凑编码（3 字符/点），单独放宽到 2000（服务端上限）
+const STRING_LIMIT = { gaze_path: 2000 };
+
 export function sanitizeTrials(rows) {
-  const clean = (v) => {
+  const clean = (v, key) => {
     if (v === null || v === undefined) return '';
     if (typeof v === 'number') return Number.isFinite(v) ? v : '';
     if (typeof v === 'boolean') return v;
-    if (typeof v === 'string') return v.slice(0, 500);
-    return String(v).slice(0, 500);
+    const lim = STRING_LIMIT[key] || 500;
+    if (typeof v === 'string') return v.slice(0, lim);
+    return String(v).slice(0, lim);
   };
   return rows.map((o) => {
     const out = {};
-    Object.keys(o).forEach((k) => { out[k] = clean(o[k]); });
+    Object.keys(o).forEach((k) => { out[k] = clean(o[k], k); });
     return out;
   });
 }
@@ -110,21 +116,26 @@ export function downloadCSV(filename, rows) {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 
-// 眼动记录 → 每试次汇总（接口只收平铺标量，不上传原始采样序列）
+// 眼动记录 → 每试次汇总（接口只收平铺标量，原始采样序列压成 gaze_path 字符串）
 // gaze_qc：1 = 该试次数据可用（人脸丢失 ≤35% 且有效采样 ≥10 Hz），0 = 建议剔除
+// gaze_path / gaze_step：原始轨迹的紧凑编码与抽稀步长，解码见 lib/gazepath.js；
+//   旧记录没有这两个字段，结果页会自动降级为「平均注视点」视图
 export function gazeSummary(rec) {
   if (!rec || !rec.samples || !rec.samples.length) {
-    return { gaze_n: 0, gaze_x: null, gaze_y: null, gaze_lost: null, gaze_qc: 0 };
+    return { gaze_n: 0, gaze_x: null, gaze_y: null, gaze_lost: null, gaze_qc: 0, gaze_path: '', gaze_step: 1 };
   }
   const ok = rec.samples.filter((s) => s[1] >= 0 && s[2] >= 0);
   const n = rec.samples.length;
   const lost = 1 - ok.length / n;
   const hz = rec.hz || 0;
+  const enc = encodePath(rec.samples);
   return {
     gaze_n: ok.length,
     gaze_x: ok.length ? +(ok.reduce((a, s) => a + s[1], 0) / ok.length).toFixed(3) : null,
     gaze_y: ok.length ? +(ok.reduce((a, s) => a + s[2], 0) / ok.length).toFixed(3) : null,
     gaze_lost: +lost.toFixed(2),
     gaze_qc: lost <= 0.35 && hz >= 10 ? 1 : 0,
+    gaze_path: enc.path,
+    gaze_step: enc.step,
   };
 }

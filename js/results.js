@@ -1,5 +1,6 @@
 // 全班汇总页：从课程服务器读取两个实验的匿名数据并汇总（被试级 + 条件级）
 import { loadAll, PROJECTS } from './lib/upload.js';
+import { mountGazeTraj } from './gazeviz.js';
 
 const $ = (id) => document.getElementById(id);
 const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
@@ -26,6 +27,13 @@ export async function main() {
 
   renderCB(recsCB);
   renderYAH(recsYAH);
+
+  // 眼动轨迹视图：容器来自 results.html（单文件版里是 #view-results 的一部分）
+  const gz = $('cb-gaze-box');
+  if (gz) {
+    try { mountGazeTraj(gz, recsCB, { contrast: 0.7 }); }
+    catch (e) { gz.innerHTML = '<p class="note">眼动轨迹视图初始化失败：' + (e && e.message ? e.message : e) + '</p>'; }
+  }
 }
 
 /* ---------------- 实验一 ---------------- */

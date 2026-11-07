@@ -26,7 +26,7 @@ WebGazer 本身没问题——这说明是工程问题，不是技术不可行�
 | 1 | **安全上下文** | `getUserMedia` 只在 https / localhost 稳定可用。Chrome 把 `file://` 当"可信来源"，但放不放行摄像头因版本、系统而异；Firefox、Safari 基本不放行 | 纯 `file://` 打开无法保证一定能开摄像头 |
 | 2 | **模型资源加载** | MediaPipe FaceMesh 要 `fetch` `.wasm` / `.data`。`file://` 页面请求 `file://` 资源被拦（origin 为 `null`），只有加 `--allow-file-access-from-files` 才行 | **这就是上次必须在 http 下跑的直接原因**，也是"单文件"最大的坎 |
 | 3 | **精度** | 1600 px 舞台在 60 cm 视距下约 39°，1° ≈ 41 px；WebGazer 典型误差 3–5° ≈ **120–200 px** | 困难档变化 bbox 只有 20–90 px → 眼动**定位不到**目标本身 |
-| 4 | **数据通道** | `/api/hw2/submit` 只收平铺标量；30 Hz × 12 试次 × 30 s ≈ 万级采样 | 只能每试次聚合上传（`gaze_n/x/y/lost`），或另外导 CSV |
+| 4 | **数据通道** | `/api/hw2/submit` 只收平铺标量；30 Hz × 12 试次 × 30 s ≈ 万级采样 | ~~只能每试次聚合上传~~ → 已解决：轨迹压成 `gaze_path`（3 字符/点，每试次 ≤1000 字），每试次另加 `gaze_step` 抽稀步长；解码与注视点识别见 `js/lib/gazepath.js`，结果页展示见 `js/gazeviz.js` |
 
 ---
 

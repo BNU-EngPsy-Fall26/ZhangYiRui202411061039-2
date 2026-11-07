@@ -341,6 +341,22 @@ details.grp.wk>summary{background:linear-gradient(90deg,#f3f6fb,#fff)}
 .stage-root.touch .mode-badge{font-size:11px;padding:2px 8px;opacity:.75}
 #toastBox,.toast{pointer-events:none}  /* 提示条不挡住触屏反应按钮 */
 
+/* ===== 结果页 · 眼动轨迹视图 ===== */
+.gv-bar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin-bottom:10px;font-size:13px}
+.gv-f{display:inline-flex;align-items:center;gap:6px;color:var(--muted);white-space:nowrap}
+.gv-f select{font-family:inherit;font-size:13px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text);max-width:260px}
+.gv-f input[type=checkbox]{accent-color:var(--gold)}
+.gv-stage{position:relative;width:100%;aspect-ratio:16/9;background:#0b1020;border-radius:10px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(13,43,92,.15)}
+.gv-canvas{display:block;width:100%;height:100%}
+.gv-timeline{display:flex;align-items:center;gap:10px;margin-top:10px}
+.gv-timeline input[type=range]{flex:1;accent-color:var(--gold)}
+.gv-time{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:96px;text-align:right}
+.gv-info{margin-top:10px;font-size:13px;line-height:1.9;color:#44506a}
+.gv-info b{color:var(--navy)}
+.gv-sum{margin-top:6px;font-size:13px;line-height:1.8;color:#44506a}
+.gv-sum b{color:var(--navy)}
+.gv-hint{margin-top:10px;font-size:12.5px;color:var(--muted);line-height:1.8}
+
 /* ============ 单文件版页面样式 ============ */
 body { background: #eef1f6; color: var(--text); }
 .view { display: none; }
@@ -529,6 +545,9 @@ body { background: #eef1f6; color: var(--text); }
   <h2>实验一 · 闪烁找不同 + 方向箭头（75% 有效）</h2>
   <div class="card" id="cb-box"><p class="note">等待数据…</p></div>
 
+  <h2>实验一 · 眼动轨迹（扫描路径 / 注视点 / 热图）</h2>
+  <div class="card" id="cb-gaze-box"><p class="note">正在准备眼动视图…</p></div>
+
   <h2>实验二 ·「你在这里」地图 + 朝向提示</h2>
   <div class="card" id="yah-box"><p class="note">等待数据…</p></div>
 
@@ -660,7 +679,9 @@ const STAGE = (function () {
 'use strict';
 
 // 全屏 16:9 实验舞台：逻辑坐标 1600x900，自动留黑边；鼠标坐标归一化到舞台 0-1
-const SW = 1600, SH = 900;
+// 一个 export 只声明一个常量：build.mjs 按 `export const NAME` 抓导出名，逗号声明会漏（见 lib/gazepath.js 注释）
+const SW = 1600;
+const SH = 900;
 
 class Stage {
   constructor() {
@@ -696,7 +717,7 @@ class Stage {
   destroy() { window.removeEventListener('resize', this._onResize); this.root.remove(); }
 }
 
-return { SW, Stage };
+return { SW, SH, Stage };
 })();
 
 /* ===== js/gaze/gaze_hub.js ===== */
@@ -886,7 +907,8 @@ const { sleep } = API;
 
 
 
-const VIEW_CM = 60, CM_PER_PX = 2.54 / 96;
+const VIEW_CM = 60;
+const CM_PER_PX = 2.54 / 96;
 const pxToDeg = (px) => Math.atan((px * CM_PER_PX) / VIEW_CM) * 180 / Math.PI;
 const ERR_LIMIT_PX = 200;
 
@@ -959,7 +981,7 @@ async function runValidation({ quick = false } = {}) {
   };
 }
 
-return { VIEW_CM, pxToDeg, ERR_LIMIT_PX, runCalibration, runValidation };
+return { VIEW_CM, CM_PER_PX, pxToDeg, ERR_LIMIT_PX, runCalibration, runValidation };
 })();
 
 /* ===== js/lib/instruct.js ===== */
@@ -1005,13 +1027,166 @@ function countdown(stage, n = 3) {
 return { instruct, ask, countdown };
 })();
 
+/* ===== js/lib/gazepath.js ===== */
+const GAZEPATH = (function () {
+'use strict';
+
+// 原始注视轨迹的紧凑编码 + 注视点识别（I-DT）
+//
+// 为什么不用对象数组：/api/hw2/submit 只收「平铺标量」，嵌套结构会被服务端转换并回一条 warning。
+// 字符串可以长一些（服务端上限 2000 字）。这里把每个注视点压成 3 个字符 = 18 bit：
+// 前 9 bit 是 x、后 9 bit 是 y（0-1 归一化坐标各量化到 512 级，1600×900 上约 3 px，远小于
+// WebGazer 120-200 px 的误差）。30 s × 15 Hz ≈ 450 点 ≈ 1350 字符，一个字段装得下。
+//
+// 时间不单独存：采样间隔固定 66 ms，第 i 个点的时间就是 i × step × 66 ms。
+
+const PATH_ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+const SAMPLE_MS = 66;    // 与 gaze_hub.js 的 SAMPLE_MS 一致
+const QLEVEL = 512;      // 每轴量化级数
+const LOST_CODE = QLEVEL * QLEVEL - 1;   // 262143 保留给「该点人脸丢失」
+// 262143 的三个 6 bit 分组都是 63，即编码表最后一个字符（'_'）
+const LOST_CHARS = PATH_ALPHA[63] + PATH_ALPHA[63] + PATH_ALPHA[63];
+
+// 注意：这里必须一个 export 只声明一个常量。build.mjs 的打包器按 `export const NAME` 抓名字，
+// 写成 `export const SW = 1600, SH = 900;` 只会导出 SW，SH 在单文件版里会变成 undefined
+// （canvas.height = undefined → 0 → drawImage 直接报错）。test/static.mjs 里有对应检查。
+const SW = 1600;
+const SH = 900;
+
+function idxOf(ch) {
+  const i = PATH_ALPHA.indexOf(ch);
+  return i;
+}
+
+// x/y < 0 或非数字 → 丢失点
+function encodePoint(x, y) {
+  if (!(x >= 0) || !(y >= 0)) return LOST_CHARS;
+  const xq = Math.min(QLEVEL - 1, Math.round(Math.max(0, Math.min(1, x)) * (QLEVEL - 1)));
+  const yq = Math.min(QLEVEL - 1, Math.round(Math.max(0, Math.min(1, y)) * (QLEVEL - 1)));
+  let v = xq * QLEVEL + yq;
+  if (v >= LOST_CODE) v = LOST_CODE - 1;   // 右上角那一个点让给「丢失」，误差 0.2%
+  return PATH_ALPHA[(v >> 12) & 63] + PATH_ALPHA[(v >> 6) & 63] + PATH_ALPHA[v & 63];
+}
+
+// 返回 [x, y]（0-1）；丢失点返回 null
+function decodePoint(code) {
+  if (!code || code.length !== 3) return null;
+  const a = idxOf(code[0]), b = idxOf(code[1]), c = idxOf(code[2]);
+  if (a < 0 || b < 0 || c < 0) return null;
+  const v = (a << 12) | (b << 6) | c;
+  if (v >= LOST_CODE) return null;
+  return [Math.floor(v / QLEVEL) / (QLEVEL - 1), (v % QLEVEL) / (QLEVEL - 1)];
+}
+
+// samples: [[t_ms, x, y], ...]（x/y < 0 表示丢失）→ { path, step, n }
+// 太长的轨迹按 step 抽稀，保证不超 maxChars。
+// 1000 字是有意压低的：36 个试次全取满也只有 ~36 KB，加上其它字段仍在服务端请求体上限之内
+// （express.json 默认 100kb）。正常试次 60–140 点根本用不到抽稀，只有接近 30 s 超时的才会 step=2。
+function encodePath(samples, { maxChars = 1000 } = {}) {
+  if (!samples || !samples.length) return { path: '', step: 1, n: 0 };
+  let step = 1;
+  while (Math.ceil(samples.length / step) * 3 > maxChars) step++;
+  let s = '';
+  for (let i = 0; i < samples.length; i += step) s += encodePoint(+samples[i][1], +samples[i][2]);
+  return { path: s, step, n: Math.ceil(samples.length / step) };
+}
+
+// → [{ t, x, y, lost }]，x/y 为 0-1
+function decodePath(path, step = 1, dt = SAMPLE_MS) {
+  const out = [];
+  if (!path) return out;
+  const st = Math.max(1, Math.round(+step) || 1);
+  for (let i = 0; i + 3 <= path.length; i += 3) {
+    const p = decodePoint(path.slice(i, i + 3));
+    const t = Math.round((i / 3) * st * dt);
+    out.push(p ? { t, x: p[0], y: p[1], lost: false } : { t, x: -1, y: -1, lost: true });
+  }
+  return out;
+}
+
+const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+
+// I-DT（离散度阈值法）：连续采样里「(maxX-minX)+(maxY-minY) ≤ disp 像素」且持续 ≥ minMs 的一段算一个注视点。
+// 与原项目 js/gaze_viz.js 用的口径一致（disp=120 px、minMs=100 ms）。
+function fixations(pts, { disp = 120, minMs = 100, gapMs = 3 * SAMPLE_MS } = {}) {
+  const good = (pts || []).filter((p) => p && !p.lost && p.x >= 0 && p.y >= 0);
+  const out = [];
+  let win = [];
+  const flush = () => {
+    if (win.length >= 2) {
+      const t0 = win[0].t, t1 = win[win.length - 1].t;
+      if (t1 - t0 >= minMs) {
+        out.push({ x: avg(win.map((p) => p.x)), y: avg(win.map((p) => p.y)), t0, t1, n: win.length });
+      }
+    }
+    win = [];
+  };
+  for (const p of good) {
+    if (win.length && p.t - win[win.length - 1].t > gapMs) flush();   // 中间丢了太久，断开
+    const test = win.concat([p]);
+    const xs = test.map((q) => q.x * SW), ys = test.map((q) => q.y * SH);
+    const spread = (Math.max.apply(null, xs) - Math.min.apply(null, xs)) + (Math.max.apply(null, ys) - Math.min.apply(null, ys));
+    if (win.length && spread > disp) { flush(); win = [p]; }
+    else win = test;
+  }
+  flush();
+  return out;
+}
+
+// 轨迹统计。bbox 为舞台像素坐标 [x, y, w, h]，margin 为容差（同点击判定的 MARGIN）
+function pathStats(pts, bbox, { margin = 30, disp = 120, minMs = 100 } = {}) {
+  const all = pts || [];
+  const good = all.filter((p) => p && !p.lost && p.x >= 0 && p.y >= 0);
+  const fixes = fixations(all, { disp, minMs });
+  const box = bbox ? [bbox[0] - margin, bbox[1] - margin, bbox[2] + 2 * margin, bbox[3] + 2 * margin] : null;
+  const inBox = (px, py) => !!box && px >= box[0] && px <= box[0] + box[2] && py >= box[1] && py <= box[1] + box[3];
+
+  let length = 0;
+  for (let i = 1; i < good.length; i++) {
+    length += Math.hypot((good[i].x - good[i - 1].x) * SW, (good[i].y - good[i - 1].y) * SH);
+  }
+  let dwell = 0, hit = 0, firstHit = null;
+  for (const f of fixes) {
+    const px = f.x * SW, py = f.y * SH;
+    if (!inBox(px, py)) continue;
+    hit++;
+    dwell += f.t1 - f.t0;
+    if (firstHit === null) firstHit = f.t0;
+  }
+  const totalDwell = fixes.reduce((a, f) => a + (f.t1 - f.t0), 0);
+  const mx = avg(good.map((p) => p.x)), my = avg(good.map((p) => p.y));
+  const cx = bbox ? bbox[0] + bbox[2] / 2 : null, cy = bbox ? bbox[1] + bbox[3] / 2 : null;
+
+  return {
+    n: all.length,           // 采样点总数（含丢失）
+    ok: good.length,         // 有效采样点
+    lostShare: all.length ? 1 - good.length / all.length : null,
+    dur: all.length ? all[all.length - 1].t - all[0].t : 0,
+    fixes,
+    nFix: fixes.length,
+    meanFixMs: fixes.length ? totalDwell / fixes.length : null,
+    length,
+    hitFix: hit,                         // 落在目标框（含容差）里的注视点数
+    hitDwell: dwell,
+    hitShare: totalDwell ? dwell / totalDwell : null,
+    firstHit,                            // 首个进入目标框的注视点起始时刻（ms）
+    mean: mx == null ? null : { x: mx, y: my },
+    meanDist: mx == null || cx == null ? null : Math.hypot(mx * SW - cx, my * SH - cy),
+  };
+}
+
+return { PATH_ALPHA, SAMPLE_MS, QLEVEL, SW, SH, encodePoint, decodePoint, encodePath, decodePath, fixations, pathStats };
+})();
+
 /* ===== js/lib/upload.js ===== */
 const UPLOAD = (function () {
 'use strict';
-
+const { encodePath } = GAZEPATH;
 // 数据上传 / 读取 / CSV 备份
 // 说明：/api/hw2/submit 只接受「平铺」字段值（数字、短字符串、布尔、数字数组），
 // 因此每个试次都在本地压平成一行标量。
+
+
 const LAB = 'https://attention-lab-production.up.railway.app';
 const PROJECTS = {
   cb: 'CA7JK4',   // 实验一：找不同 + 方向箭头
@@ -1019,17 +1194,21 @@ const PROJECTS = {
 };
 
 // 服务器只接受「平铺」标量值，这里把 null/undefined/对象统一压平，避免被截断或报格式错误
+// 字符串默认截到 500 字；gaze_path 是眼动轨迹的紧凑编码（3 字符/点），单独放宽到 2000（服务端上限）
+const STRING_LIMIT = { gaze_path: 2000 };
+
 function sanitizeTrials(rows) {
-  const clean = (v) => {
+  const clean = (v, key) => {
     if (v === null || v === undefined) return '';
     if (typeof v === 'number') return Number.isFinite(v) ? v : '';
     if (typeof v === 'boolean') return v;
-    if (typeof v === 'string') return v.slice(0, 500);
-    return String(v).slice(0, 500);
+    const lim = STRING_LIMIT[key] || 500;
+    if (typeof v === 'string') return v.slice(0, lim);
+    return String(v).slice(0, lim);
   };
   return rows.map((o) => {
     const out = {};
-    Object.keys(o).forEach((k) => { out[k] = clean(o[k]); });
+    Object.keys(o).forEach((k) => { out[k] = clean(o[k], k); });
     return out;
   });
 }
@@ -1121,22 +1300,27 @@ function downloadCSV(filename, rows) {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 
-// 眼动记录 → 每试次汇总（接口只收平铺标量，不上传原始采样序列）
+// 眼动记录 → 每试次汇总（接口只收平铺标量，原始采样序列压成 gaze_path 字符串）
 // gaze_qc：1 = 该试次数据可用（人脸丢失 ≤35% 且有效采样 ≥10 Hz），0 = 建议剔除
+// gaze_path / gaze_step：原始轨迹的紧凑编码与抽稀步长，解码见 lib/gazepath.js；
+//   旧记录没有这两个字段，结果页会自动降级为「平均注视点」视图
 function gazeSummary(rec) {
   if (!rec || !rec.samples || !rec.samples.length) {
-    return { gaze_n: 0, gaze_x: null, gaze_y: null, gaze_lost: null, gaze_qc: 0 };
+    return { gaze_n: 0, gaze_x: null, gaze_y: null, gaze_lost: null, gaze_qc: 0, gaze_path: '', gaze_step: 1 };
   }
   const ok = rec.samples.filter((s) => s[1] >= 0 && s[2] >= 0);
   const n = rec.samples.length;
   const lost = 1 - ok.length / n;
   const hz = rec.hz || 0;
+  const enc = encodePath(rec.samples);
   return {
     gaze_n: ok.length,
     gaze_x: ok.length ? +(ok.reduce((a, s) => a + s[1], 0) / ok.length).toFixed(3) : null,
     gaze_y: ok.length ? +(ok.reduce((a, s) => a + s[2], 0) / ok.length).toFixed(3) : null,
     gaze_lost: +lost.toFixed(2),
     gaze_qc: lost <= 0.35 && hz >= 10 ? 1 : 0,
+    gaze_path: enc.path,
+    gaze_step: enc.step,
   };
 }
 
@@ -2233,7 +2417,9 @@ const MARGIN = 32;       // 点击判定边距（原来 64 太宽，6 个场景�
 
 const N_PER_CUE = 12;                     // 每个线索条件的试次数（作业要求 ≥10）
 const N_TOTAL = N_PER_CUE * 3;            // 36
-const CUE_NONE = 0, CUE_VALID = 1, CUE_INVALID = 2;
+const CUE_NONE = 0;
+const CUE_VALID = 1;
+const CUE_INVALID = 2;
 const CUE_LABEL = { 0: '无箭头', 1: '箭头指向正确', 2: '箭头指向相反' };
 
 function shuffle(a) {
@@ -2478,6 +2664,8 @@ async function oneTrial(stage, hub, t, i, total, rec, pause) {
     gaze_y: gs.gaze_y,
     gaze_lost: gs.gaze_lost,
     gaze_qc: gs.gaze_qc,
+    gaze_path: gs.gaze_path,     // 原始轨迹（3 字符/点的紧凑编码，解码见 lib/gazepath.js）
+    gaze_step: gs.gaze_step,     // 抽稀步长（1 = 未抽稀，66 ms/点）
   };
 }
 
@@ -2529,7 +2717,7 @@ async function run({ stage, hub, subject }) {
   };
 }
 
-return { N_PER_CUE, N_TOTAL, CUE_NONE, CUE_LABEL, buildTrials, run };
+return { N_PER_CUE, N_TOTAL, CUE_NONE, CUE_VALID, CUE_INVALID, CUE_LABEL, buildTrials, run };
 })();
 
 /* ===== js/exp/yah_cued.js ===== */
@@ -2759,11 +2947,307 @@ async function run({ stage, subject }) {
 return { LANDMARKS, drawYah, buildTrials, mapBasedAnswer, run };
 })();
 
+/* ===== js/gazeviz.js ===== */
+const GAZEMAP = (function () {
+'use strict';
+const { drawPlaza, personBox } = CB2MOD;
+const { decodePath, pathStats, SW, SH } = GAZEPATH;
+// 结果页 · 眼动轨迹视图（对照原项目 js/gaze_viz.js 的做法：扫描路径 + 注视点 + 热图 + 回放）
+//
+// 与原项目的三点不同：
+// 1) 原项目从服务端拿 samples / fixations；这里服务端只存了 gaze_path 字符串，解码在 lib/gazepath.js；
+// 2) 底板不另外存图：实验一只有一个场景，画面上唯一的差异就是「多出来的那个人」，
+//    它的脚点 (ex, ey) 已逐试次记录，用 drawPlaza(ctx, extra) 就能逐像素复原当时的刺激；
+// 3) 旧记录没有 gaze_path，降级成「平均注视点 + 点击位置 + 变化区域」的关系图，仍能回答
+//    「他看的地方离变化有多远」。
+
+
+
+const CONTRAST = 0.7;      // 与 js/exp/cb_cued.js 的 CONTRAST 一致
+const MARGIN = 30;         // 判定/统计容差（像素）
+const CUE_LABEL = { 0: '无箭头', 1: '箭头指向正确', 2: '箭头指向相反' };
+const $sel = (el, s) => el.querySelector(s);
+
+function hasPath(t) {
+  return !!(t && typeof t.gaze_path === 'string' && t.gaze_path.length >= 6);
+}
+function hasGaze(t) { return !!(t && +t.gaze_n > 0); }
+
+// 由 ex/ey 复原「带变化目标」的那一版画面（与实验里 second 图一致：同底板 + 多一个人 + 对比度）
+function stimCanvas(ex, ey, contrast = CONTRAST) {
+  const raw = document.createElement('canvas'); raw.width = SW; raw.height = SH;
+  const s = 20 + (ey - 380) / 8;
+  drawPlaza(raw.getContext('2d'), { x: ex, y: ey, s });
+  const c = document.createElement('canvas'); c.width = SW; c.height = SH;
+  const cx = c.getContext('2d');
+  cx.filter = 'contrast(' + contrast + ')';
+  cx.drawImage(raw, 0, 0);
+  cx.filter = 'none';
+  return c;
+}
+
+const ms = (x) => (x == null ? '—' : Math.round(x) + ' ms');
+const pct = (x) => (x == null ? '—' : (x * 100).toFixed(0) + '%');
+const fmt = (x) => (x == null ? '—' : Math.round(x).toLocaleString('zh-CN'));
+
+// 一条记录的轨迹汇总（供表头/降级提示用）
+function recordGazeSummary(rec) {
+  const ts = (rec && rec.trials) || [];
+  const withGaze = ts.filter(hasGaze);
+  const withPath = ts.filter(hasPath);
+  let hitSee = 0, hitMiss = 0;
+  for (const t of withPath) {
+    const st = pathStats(decodePath(t.gaze_path, t.gaze_step), bboxOf(t), { margin: MARGIN });
+    if (st.hitFix > 0) { if (t.resp_ms !== null && t.resp_ms !== '') hitSee++; else hitMiss++; }
+  }
+  return { n: ts.length, withGaze: withGaze.length, withPath: withPath.length, hitSee, hitMiss };
+}
+
+function bboxOf(t) {
+  const ex = +t.ex, ey = +t.ey;
+  if (!isFinite(ex) || !isFinite(ey)) return null;
+  return personBox(ex, ey, 20 + (ey - 380) / 8);
+}
+
+/* ---------------- 主入口 ---------------- */
+function mountGazeTraj(el, records, opts = {}) {
+  if (!el) return null;
+  const recs = (records || []).filter((r) => (r.trials || []).some(hasGaze));
+  if (!recs.length) {
+    el.innerHTML = '<p class="note">还没有带眼动的记录。眼动是可选层：登录后点「开启摄像头眼动」并完成 9 点校准，实验一才会记录注视数据。</p>';
+    return null;
+  }
+
+  const totalPath = recs.reduce((a, r) => a + (r.trials || []).filter(hasPath).length, 0);
+  const totalTrials = recs.reduce((a, r) => a + (r.trials || []).length, 0);
+
+  el.innerHTML = `
+    <div class="gv-bar">
+      <label class="gv-f">被试 <select class="gv-rec">${recs.map((r, i) => `<option value="${i}">${r.participant}${r.created_at ? ' · ' + String(r.created_at).slice(5, 16) : ''}</option>`).join('')}</select></label>
+      <label class="gv-f">试次 <select class="gv-trial"></select></label>
+      <label class="gv-f"><input type="checkbox" class="gv-heat"> 热图</label>
+      <label class="gv-f"><input type="checkbox" class="gv-fixchk" checked> 注视点</label>
+      <button type="button" class="btn btn-o btn-sm gv-play">▶ 回放</button>
+    </div>
+    <div class="gv-stage"><canvas class="gv-canvas" width="${SW}" height="${SH}"></canvas></div>
+    <div class="gv-timeline"><input type="range" class="gv-slider" min="0" max="1000" value="1000"><span class="gv-time"></span></div>
+    <p class="gv-info"></p>
+    <p class="gv-sum"></p>
+    <p class="note gv-hint"></p>`;
+
+  const canvas = $sel(el, '.gv-canvas'), ctx = canvas.getContext('2d');
+  const selRec = $sel(el, '.gv-rec'), selTrial = $sel(el, '.gv-trial');
+  const chkHeat = $sel(el, '.gv-heat'), chkFix = $sel(el, '.gv-fixchk');
+  const slider = $sel(el, '.gv-slider'), timeEl = $sel(el, '.gv-time');
+  const playBtn = $sel(el, '.gv-play'), infoEl = $sel(el, '.gv-info'), sumEl = $sel(el, '.gv-sum');
+
+  let rec = recs[0], trial = null, t = Infinity, playing = false, raf = 0, cache = new Map(), dur = 0;
+  const contrast = opts.contrast || CONTRAST;
+
+  const stim = (ex, ey) => {
+    const k = ex + ',' + ey;
+    if (!cache.has(k)) cache.set(k, stimCanvas(ex, ey, contrast));
+    return cache.get(k);
+  };
+
+  function fillTrials() {
+    const ts = rec.trials || [];
+    selTrial.innerHTML = ts.map((tr, i) => {
+      const tag = hasPath(tr) ? '' : (hasGaze(tr) ? '（无轨迹）' : '（无眼动）');
+      const rt = tr.resp_ms === null || tr.resp_ms === '' ? '未报告' : (tr.resp_ms / 1000).toFixed(1) + ' s';
+      return `<option value="${i}">#${tr.i} ${CUE_LABEL[+tr.cue_type] || ''} · ${rt}${tag}</option>`;
+    }).join('');
+    // 默认挑第一个有轨迹的试次，没有就挑第一个有眼动的
+    const first = ts.findIndex(hasPath);
+    const alt = ts.findIndex(hasGaze);
+    const pick = first >= 0 ? first : (alt >= 0 ? alt : 0);
+    selTrial.value = String(pick);
+    pickTrial();
+  }
+
+  function pickTrial() {
+    const ts = rec.trials || [];
+    trial = ts[+selTrial.value] || null;
+    stop();
+    const pts = trial && hasPath(trial) ? decodePath(trial.gaze_path, trial.gaze_step) : [];
+    dur = pts.length ? pts[pts.length - 1].t : 0;
+    t = Infinity;
+    slider.value = 1000;
+    draw();
+  }
+
+  function draw() {
+    if (!trial) { ctx.clearRect(0, 0, SW, SH); return; }
+    const ex = +trial.ex, ey = +trial.ey, bbox = bboxOf(trial);
+    const tt = Math.min(t, dur || Infinity);
+    const pts = hasPath(trial) ? decodePath(trial.gaze_path, trial.gaze_step) : [];
+    const tShow = isFinite(tt) ? tt : dur;
+    const shown = pts.filter((p) => p.t <= tShow);
+
+    // 1) 底板
+    if (isFinite(ex) && isFinite(ey)) ctx.drawImage(stim(ex, ey), 0, 0);
+    else { ctx.fillStyle = '#c9c2b2'; ctx.fillRect(0, 0, SW, SH); }
+    ctx.fillStyle = 'rgba(10,16,30,.26)'; ctx.fillRect(0, 0, SW, SH);
+
+    // 2) 热图（叠加在底板上，越看越亮）
+    if (chkHeat.checked && shown.length) {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      for (const p of shown) {
+        if (p.lost) continue;
+        const x = p.x * SW, y = p.y * SH, r = 58;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, 'rgba(255,120,0,.075)'); g.addColorStop(1, 'rgba(255,120,0,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // 3) 变化区域（黄金框）
+    if (bbox) {
+      ctx.save();
+      ctx.strokeStyle = '#C8A44A'; ctx.lineWidth = 5; ctx.setLineDash([]);
+      ctx.strokeRect(bbox[0], bbox[1], bbox[2], bbox[3]);
+      ctx.restore();
+    }
+
+    // 4) 原始轨迹折线（只画到现在这一刻）
+    const line = shown.filter((p) => !p.lost);
+    if (line.length > 1) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      line.forEach((p, i) => { const x = p.x * SW, y = p.y * SH; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 5) 注视点（I-DT）：圆大小 ∝ 时长，编号是顺序；落在变化区里的标红
+    const st = pathStats(shown, bbox, { margin: MARGIN });
+    if (chkFix.checked) {
+      const fx = st.fixes;
+      const inBox = (f) => {
+        if (!bbox) return false;
+        const x = f.x * SW, y = f.y * SH;
+        return x >= bbox[0] - MARGIN && x <= bbox[0] + bbox[2] + MARGIN && y >= bbox[1] - MARGIN && y <= bbox[1] + bbox[3] + MARGIN;
+      };
+      fx.forEach((f, i) => {
+        const x = f.x * SW, y = f.y * SH, r = Math.min(44, 9 + (f.t1 - f.t0) / 25);
+        ctx.beginPath(); ctx.arc(x, y, r, 0, 7);
+        ctx.fillStyle = inBox(f) ? 'rgba(229,57,53,.72)' : 'rgba(20,32,64,.55)';
+        ctx.fill();
+        ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
+        if (fx.length <= 40) {
+          ctx.fillStyle = '#fff'; ctx.font = '700 15px system-ui,sans-serif';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(String(i + 1), x, y);
+        }
+      });
+    }
+
+    // 6) 当前视线（黄色光点）
+    const last = line.length ? line[line.length - 1] : null;
+    if (last && isFinite(tShow)) {
+      const x = last.x * SW, y = last.y * SH;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, 26);
+      g.addColorStop(0, 'rgba(255,214,0,.95)'); g.addColorStop(1, 'rgba(255,214,0,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 26, 0, 7); ctx.fill();
+    }
+
+    // 7) 点击位置（红点）与平均注视点（青十字，旧记录唯一能画的眼动信息）
+    if (+trial.clicked === 1 && trial.click_x !== null && trial.click_x !== '') {
+      const x = +trial.click_x * SW, y = +trial.click_y * SH;
+      ctx.fillStyle = '#e53935'; ctx.beginPath(); ctx.arc(x, y, 10, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke();
+    }
+    if (trial.gaze_x !== null && trial.gaze_x !== '' && !hasPath(trial)) {
+      const x = +trial.gaze_x * SW, y = +trial.gaze_y * SH;
+      ctx.strokeStyle = '#00d4ff'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(x - 16, y); ctx.lineTo(x + 16, y); ctx.moveTo(x, y - 16); ctx.lineTo(x, y + 16); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, 7, 0, 7); ctx.stroke();
+    }
+
+    // 8) 文字信息
+    if (hasPath(trial)) {
+      infoEl.innerHTML =
+        `采样 <b>${st.n}</b> 点（有效 ${st.ok}，丢脸 ${pct(st.lostShare)}）· 注视点 <b>${st.nFix}</b> 个`
+        + `（I-DT ≤120 px / ≥100 ms，平均 ${ms(st.meanFixMs)}）· 轨迹长 ${fmt(st.length)} px`
+        + `<br>首个进入变化区的注视：<b>${st.firstHit == null ? '未进入' : ms(st.firstHit)}</b>`
+        + `　变化区内注视占比 <b>${pct(st.hitShare)}</b>（${st.hitFix}/${st.nFix} 个）`
+        + `　平均注视点距变化中心 ${fmt(st.meanDist)} px`;
+    } else {
+      infoEl.innerHTML = hasGaze(trial)
+        ? `这一题<b>没有原始轨迹</b>（旧版本只上传了整题的算术平均）。图中青色十字 = 平均注视点，`
+          + `距变化中心 <b>${fmt(trial.gaze_x !== '' && bbox ? Math.hypot(+trial.gaze_x * SW - (bbox[0] + bbox[2] / 2), +trial.gaze_y * SH - (bbox[1] + bbox[3] / 2)) : null)}</b> px；`
+          + `丢脸率 ${pct(+trial.gaze_lost)}，有效采样 ${trial.gaze_n} 个。`
+        : '这一题没有眼动记录（被试未开启摄像头，或该题眼动全部丢失）。图中只有变化区域与点击位置。';
+    }
+    timeEl.textContent = hasPath(trial) && dur ? `${(Math.min(tShow, dur) / 1000).toFixed(1)} / ${(dur / 1000).toFixed(1)} s` : '';
+    playBtn.style.display = hasPath(trial) ? '' : 'none';
+    slider.disabled = !hasPath(trial);
+  }
+
+  function updateSum() {
+    const s = recordGazeSummary(rec);
+    const noPath = s.withGaze - s.withPath;
+    sumEl.innerHTML = `<b>${rec.participant}</b>：${s.n} 个试次，${s.withGaze} 个有眼动数据，其中 <b>${s.withPath}</b> 个带原始轨迹。`
+      + (s.withPath
+        ? `　有轨迹的试次里，注视点进过变化区的 <b>${s.hitSee + s.hitMiss}</b> 个 —— 报告了变化的 ${s.hitSee} 个（看了才看见），没报告的 ${s.hitMiss} 个（看了却没看见）。`
+        : '')
+      + (noPath
+        ? (s.withPath
+          ? `　另有 ${noPath} 个试次只有平均注视点（旧版本上传，画不出路径）。`
+          : `　这 ${noPath} 个试次都只有平均注视点，没有采样序列 —— 旧版本上传时只存了整题的算术平均，所以画不出扫描路径。`)
+        : '');
+  }
+
+  function stop() { playing = false; cancelAnimationFrame(raf); playBtn.textContent = '▶ 回放'; }
+
+  playBtn.onclick = () => {
+    if (playing) { stop(); return; }
+    if (!hasPath(trial) || !dur) return;
+    playing = true; playBtn.textContent = '⏸ 暂停';
+    if (t >= dur) t = 0;
+    let last = performance.now();
+    const step = (now) => {
+      if (!playing) return;
+      t += now - last; last = now;
+      if (t >= dur) { t = dur; stop(); }
+      slider.value = Math.round(1000 * Math.min(1, t / dur));
+      draw();
+      if (playing) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+  };
+  slider.oninput = () => { stop(); t = dur * slider.value / 1000; draw(); };
+  chkHeat.onchange = draw;
+  chkFix.onchange = draw;
+  selRec.onchange = () => { rec = recs[+selRec.value] || recs[0]; fillTrials(); updateSum(); };
+  selTrial.onchange = pickTrial;
+
+  // 页面级说明：现有数据到底能不能画轨迹
+  const hint = $sel(el, '.gv-hint');
+  if (hint) {
+    hint.innerHTML = totalPath
+      ? `全班 ${recs.length} 份带眼动的记录、${totalTrials} 个试次中有 <b>${totalPath}</b> 个带原始轨迹（gaze_path 字段）。`
+      : `现有 ${recs.length} 份记录、${totalTrials} 个试次都是<b>旧版本上传</b>：只存了整题的算术平均注视点，没有采样序列，`
+        + `所以画不出扫描路径。要拿到轨迹，需要在<b>最新版页面</b>上重跑一次实验一（约 5–6 分钟，需开摄像头并完成 9 点校准）。`;
+  }
+
+  fillTrials();
+  updateSum();
+  return { reload: () => { rec = recs[+selRec.value] || recs[0]; fillTrials(); updateSum(); } };
+}
+
+return { hasPath, hasGaze, stimCanvas, recordGazeSummary, mountGazeTraj };
+})();
+
 /* ===== js/results.js ===== */
 const RESULTS = (function () {
 'use strict';
 const { loadAll, PROJECTS } = UPLOAD;
+const { mountGazeTraj } = GAZEMAP;
 // 全班汇总页：从课程服务器读取两个实验的匿名数据并汇总（被试级 + 条件级）
+
 
 
 const $ = (id) => document.getElementById(id);
@@ -2791,6 +3275,13 @@ async function main() {
 
   renderCB(recsCB);
   renderYAH(recsYAH);
+
+  // 眼动轨迹视图：容器来自 results.html（单文件版里是 #view-results 的一部分）
+  const gz = $('cb-gaze-box');
+  if (gz) {
+    try { mountGazeTraj(gz, recsCB, { contrast: 0.7 }); }
+    catch (e) { gz.innerHTML = '<p class="note">眼动轨迹视图初始化失败：' + (e && e.message ? e.message : e) + '</p>'; }
+  }
 }
 
 /* ---------------- 实验一 ---------------- */
@@ -4060,7 +4551,7 @@ return {  };
 
 // 调试口：便于在控制台复用模块、也供自动自检使用
 
-window.__hw2 = { API, STAGE, GAZE, CALIB, INSTRUCT, UPLOAD, STATS, CHART, PAUSE, SCENES, CB2MOD, CBCUED, YAHCUED, W6, RESULTS, ANALYSIS, REPORT };
+window.__hw2 = { API, STAGE, GAZE, CALIB, INSTRUCT, GAZEPATH, UPLOAD, STATS, CHART, PAUSE, SCENES, CB2MOD, CBCUED, YAHCUED, W6, GAZEMAP, RESULTS, ANALYSIS, REPORT };
 
 })();
 </script>

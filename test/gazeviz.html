@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>眼动轨迹视图 · 预览</title>
+<link rel="stylesheet" href="../css/lab.css">
+<style>
+  body { background: #eef1f6; padding: 18px; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  .card { background: #fff; border-radius: 12px; padding: 18px 20px; box-shadow: 0 2px 10px rgba(13,43,92,.07); }
+  .banner { background: #fff6e5; border-left: 4px solid #C8A44A; padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 13px; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="banner" id="banner">正在读取服务器数据…</div>
+    <div id="box"></div>
+  </div>
+</div>
+<script type="module">
+// 眼动轨迹视图的独立预览页：用真实后端数据渲染；若全班都还没有 gaze_path，
+// 就临时给一个试次合成一条「从注视中心漂移到变化区」的假轨迹，方便先看渲染效果。
+// 注意：合成数据只存在于本页内存里，不会上传、不会写进服务器。
+import { mountGazeTraj } from '../js/gazeviz.js';
+import { loadAll, PROJECTS } from '../js/lib/upload.js';
+import { encodePath } from '../js/lib/gazepath.js';
+
+const banner = document.getElementById('banner');
+const box = document.getElementById('box');
+
+let recs = [];
+try {
+  recs = await loadAll(PROJECTS.cb, 'changeblind_cue_arrow');
+} catch (e) {
+  banner.innerHTML = '读取服务器数据失败（' + (e && e.message ? e.message : e) + '），下面用纯合成数据演示。';
+}
+
+const hasReal = recs.some((r) => (r.trials || []).some((t) => t.gaze_path));
+
+if (!hasReal) {
+  // 造一条演示轨迹：前半段在屏幕中部游走，后半段收敛到变化目标
+  const demoPath = (t, n = 70) => {
+    const tx = Math.max(0, Math.min(1, +t.ex / 1600));
+    const ty = Math.max(0, Math.min(1, +t.ey / 900));
+    const pts = [];
+    let x = 0.5 + (Math.random() - 0.5) * 0.25;
+    let y = 0.48 + (Math.random() - 0.5) * 0.2;
+    for (let i = 0; i < n; i++) {
+      const k = i / (n - 1);
+      x = Math.max(0, Math.min(1, x + (Math.random() - 0.5) * 0.16 * (1 - k * 0.7)));
+      y = Math.max(0, Math.min(1, y + (Math.random() - 0.5) * 0.16 * (1 - k * 0.7)));
+      const w = k * k;
+      pts.push([i * 66, x * (1 - w) + tx * w, y * (1 - w) + ty * w]);
+    }
+    return encodePath(pts).path;
+  };
+
+  const src = recs.find((r) => (r.trials || []).some((t) => +t.gaze_n > 0)) || { participant: 'DEMO', trials: [] };
+  const trials = (src.trials || []).length ? src.trials.slice() : [];
+  if (!trials.length) {
+    for (let i = 0; i < 36; i++) {
+      trials.push({ i: i + 1, cue_type: i % 3, ex: 300 + (i * 97) % 1000, ey: 450 + (i * 61) % 350, resp_ms: 4000 + i * 120, clicked: 1, click_x: 0.5, click_y: 0.5, gaze_n: 70, gaze_x: 0.5, gaze_y: 0.5, gaze_lost: 0, gaze_qc: 1, click_ok: 1 });
+    }
+  }
+  trials.forEach((t, i) => {
+    if (i % 4 === 0) { t.gaze_path = demoPath(t); t.gaze_step = 1; }
+  });
+  recs = [{ participant: (src.participant || 'DEMO') + '（合成轨迹）', created_at: src.created_at || '', trials }];
+  banner.innerHTML = '⚠️ 服务器上的记录都<b>还没有原始轨迹</b>（旧版本只上传了平均注视点）。本页给其中若干试次合成了演示轨迹，只为检查渲染；真实轨迹要在最新版页面上重跑实验一才会产生。';
+} else {
+  banner.innerHTML = '数据里已有带 <code>gaze_path</code> 的记录，直接渲染真实轨迹。';
+}
+
+mountGazeTraj(box, recs, { contrast: 0.7 });
+window.__ready = true;
+</script>
+</body>
+</html>

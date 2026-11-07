@@ -21,7 +21,9 @@ const MARGIN = 32;       // 点击判定边距（原来 64 太宽，6 个场景�
 
 export const N_PER_CUE = 12;                     // 每个线索条件的试次数（作业要求 ≥10）
 export const N_TOTAL = N_PER_CUE * 3;            // 36
-export const CUE_NONE = 0, CUE_VALID = 1, CUE_INVALID = 2;
+export const CUE_NONE = 0;
+export const CUE_VALID = 1;
+export const CUE_INVALID = 2;
 export const CUE_LABEL = { 0: '无箭头', 1: '箭头指向正确', 2: '箭头指向相反' };
 
 function shuffle(a) {
@@ -266,6 +268,8 @@ async function oneTrial(stage, hub, t, i, total, rec, pause) {
     gaze_y: gs.gaze_y,
     gaze_lost: gs.gaze_lost,
     gaze_qc: gs.gaze_qc,
+    gaze_path: gs.gaze_path,     // 原始轨迹（3 字符/点的紧凑编码，解码见 lib/gazepath.js）
+    gaze_step: gs.gaze_step,     // 抽稀步长（1 = 未抽稀，66 ms/点）
   };
 }
 

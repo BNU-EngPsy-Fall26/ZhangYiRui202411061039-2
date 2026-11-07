@@ -1,5 +1,7 @@
 // 全屏 16:9 实验舞台：逻辑坐标 1600x900，自动留黑边；鼠标坐标归一化到舞台 0-1
-export const SW = 1600, SH = 900;
+// 一个 export 只声明一个常量：build.mjs 按 `export const NAME` 抓导出名，逗号声明会漏（见 lib/gazepath.js 注释）
+export const SW = 1600;
+export const SH = 900;
 
 export class Stage {
   constructor() {
